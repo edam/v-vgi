@@ -22,6 +22,20 @@ fn C.gi_base_info_unref(info voidptr)
 // GObject type system functions for determining info type
 fn C.G_OBJECT_TYPE_NAME(instance voidptr) &char
 
+// Object info functions
+fn C.gi_object_info_get_parent(info &C.GIObjectInfo) &C.GIObjectInfo
+fn C.gi_object_info_get_n_properties(info &C.GIObjectInfo) u32
+fn C.gi_object_info_get_property(info &C.GIObjectInfo, n u32) &C.GIPropertyInfo
+fn C.gi_object_info_get_n_methods(info &C.GIObjectInfo) u32
+fn C.gi_object_info_get_method(info &C.GIObjectInfo, n u32) &C.GIFunctionInfo
+
+// Property info functions
+fn C.gi_property_info_get_flags(info &C.GIPropertyInfo) int
+
+// Type info functions
+fn C.gi_property_info_get_type_info(info &C.GIPropertyInfo) &C.GITypeInfo
+fn C.gi_type_info_get_tag(info &C.GITypeInfo) int
+
 // Error handling
 fn C.g_error_free(error &C.GError)
 
@@ -36,6 +50,22 @@ struct C.GITypelib {}
 struct C.GIBaseInfo {}
 
 @[typedef]
+struct C.GIObjectInfo {}
+
+@[typedef]
+struct C.GIPropertyInfo {}
+
+@[typedef]
+struct C.GIFunctionInfo {}
+
+@[typedef]
+struct C.GITypeInfo {}
+
+@[typedef]
 struct C.GError {
 	message &char
 }
+
+// Property flags
+const gi_property_readable = 1 << 0
+const gi_property_writable = 1 << 1

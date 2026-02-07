@@ -102,3 +102,63 @@ pub fn (info BaseInfo) get_type() string {
 	}
 	return type_name
 }
+
+// ObjectInfo represents a GIObjectInfo
+pub struct ObjectInfo {
+	BaseInfo
+}
+
+// as_object_info casts BaseInfo to ObjectInfo
+pub fn (info BaseInfo) as_object_info() ObjectInfo {
+	return ObjectInfo{
+		BaseInfo: info
+	}
+}
+
+// get_parent returns the parent object info, if any
+pub fn (info ObjectInfo) get_parent() ?ObjectInfo {
+	parent_ptr := C.gi_object_info_get_parent(&C.GIObjectInfo(info.ptr))
+	if parent_ptr == unsafe { nil } {
+		return none
+	}
+	return ObjectInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(parent_ptr)
+		}
+	}
+}
+
+// get_n_properties returns the number of properties
+pub fn (info ObjectInfo) get_n_properties() u32 {
+	return C.gi_object_info_get_n_properties(&C.GIObjectInfo(info.ptr))
+}
+
+// get_property returns property info at index
+pub fn (info ObjectInfo) get_property(n u32) ?PropertyInfo {
+	prop_ptr := C.gi_object_info_get_property(&C.GIObjectInfo(info.ptr), n)
+	if prop_ptr == unsafe { nil } {
+		return none
+	}
+	return PropertyInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(prop_ptr)
+		}
+	}
+}
+
+// PropertyInfo represents a GIPropertyInfo
+pub struct PropertyInfo {
+	BaseInfo
+}
+
+// is_readable returns true if the property is readable
+pub fn (info PropertyInfo) is_readable() bool {
+	flags := C.gi_property_info_get_flags(&C.GIPropertyInfo(info.ptr))
+	return (flags & gi_property_readable) != 0
+}
+
+// is_writable returns true if the property is writable
+pub fn (info PropertyInfo) is_writable() bool {
+	flags := C.gi_property_info_get_flags(&C.GIPropertyInfo(info.ptr))
+	return (flags & gi_property_writable) != 0
+}
