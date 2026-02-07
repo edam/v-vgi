@@ -287,6 +287,9 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 
 	content += '\n'
 
+	// generate C function declarations for methods
+	content += generate_c_method_declarations(info)
+
 	// struct with embedded parent
 	content += '// ${object_name} struct\n'
 	content += 'pub struct ${object_name} {\n'
@@ -305,6 +308,9 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 
 	// property methods
 	content += generate_property_methods(info, object_name)
+
+	// object methods
+	content += generate_object_methods(info, object_name)
 
 	os.write_file(file_path, content) or {
 		eprintln('Warning: Failed to write ${file_path}')
@@ -391,6 +397,189 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 		}
 
 		prop.free()
+	}
+
+	return content
+}
+
+// generate_c_method_declarations generates C function declarations for methods
+fn generate_c_method_declarations(info ObjectInfo) string {
+	mut content := ''
+	mut has_methods := false
+
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		method_name := method.get_name()
+
+		// skip private methods
+		if method_name.starts_with('_') {
+			method.free()
+			continue
+		}
+
+		symbol := method.get_symbol()
+		if symbol == '' {
+			method.free()
+			continue
+		}
+
+		if !has_methods {
+			content += '// C method declarations\n'
+			has_methods = true
+		}
+
+		// build C parameter list
+		mut c_params := ['obj voidptr']
+		n_args := method.get_n_args()
+
+		for j in 0 .. int(n_args) {
+			arg := method.get_arg(u32(j)) or { continue }
+			direction := arg.get_direction()
+
+			if direction == gi_direction_in {
+				arg_type := arg.get_v_type()
+				// convert V type to C type
+				c_type := match arg_type {
+					'string' { '&char' }
+					'bool' { 'bool' }
+					'int', 'i8', 'i16', 'i32' { 'int' }
+					'u8', 'u16', 'u32' { 'u32' }
+					'i64' { 'i64' }
+					'u64' { 'u64' }
+					'f32' { 'f32' }
+					'f64' { 'f64' }
+					else { 'voidptr' }
+				}
+				c_params << 'arg${j} ${c_type}'
+			}
+
+			arg.free()
+		}
+
+		// get return type
+		return_type_info := method.get_return_type()
+		return_v_type := return_type_info.to_v_type()
+		return_type_info.free()
+
+		skip_return := method.skip_return()
+
+		c_return_type := if skip_return || return_v_type == 'voidptr' {
+			'voidptr'
+		} else {
+			match return_v_type {
+				'string' { '&char' }
+				'bool' { 'bool' }
+				'int', 'i8', 'i16' { 'int' }
+				'u8', 'u16', 'u32' { 'u32' }
+				'i64' { 'i64' }
+				'u64' { 'u64' }
+				'f32' { 'f32' }
+				'f64' { 'f64' }
+				else { 'voidptr' }
+			}
+		}
+
+		content += 'fn C.${symbol}(${c_params.join(', ')}) ${c_return_type}\n'
+
+		method.free()
+	}
+
+	if has_methods {
+		content += '\n'
+	}
+
+	return content
+}
+
+// generate_object_methods generates object method bindings
+fn generate_object_methods(info ObjectInfo, object_name string) string {
+	mut content := ''
+
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		method_name := method.get_name()
+
+		// skip private methods
+		if method_name.starts_with('_') {
+			method.free()
+			continue
+		}
+
+		symbol := method.get_symbol()
+		if symbol == '' {
+			method.free()
+			continue
+		}
+
+		// convert kebab-case to snake_case
+		v_method_name := method_name.replace('-', '_')
+
+		// build parameter list and call args
+		mut params := []string{}
+		mut call_args := []string{}
+		n_args := method.get_n_args()
+
+		for j in 0 .. int(n_args) {
+			arg := method.get_arg(u32(j)) or { continue }
+			arg_name := arg.get_name()
+			arg_type := arg.get_v_type()
+			direction := arg.get_direction()
+
+			// only handle 'in' parameters for now
+			if direction == gi_direction_in {
+				params << '${arg_name} ${arg_type}'
+				// convert V value to C value if needed
+				call_arg := if arg_type == 'string' { '${arg_name}.str' } else { arg_name }
+				call_args << call_arg
+			}
+
+			arg.free()
+		}
+
+		param_list := params.join(', ')
+
+		// get return type
+		return_type_info := method.get_return_type()
+		return_v_type := return_type_info.to_v_type()
+		return_type_info.free()
+
+		skip_return := method.skip_return()
+		needs_string_conv := return_v_type == 'string'
+
+		// generate method signature
+		content += '// ${v_method_name} wraps ${method_name}\n'
+
+		if skip_return || return_v_type == 'voidptr' {
+			// void return
+			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) {\n'
+			content += '\tC.${symbol}(obj.ptr'
+			if call_args.len > 0 {
+				content += ', ${call_args.join(', ')}'
+			}
+			content += ')\n'
+			content += '}\n\n'
+		} else {
+			// typed return
+			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_v_type} {\n'
+			if needs_string_conv {
+				content += '\treturn unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
+			} else {
+				content += '\treturn C.${symbol}(obj.ptr'
+			}
+			if call_args.len > 0 {
+				content += ', ${call_args.join(', ')}'
+			}
+			if needs_string_conv {
+				content += ')) }\n'
+			} else {
+				content += ')\n'
+			}
+			content += '}\n\n'
+		}
+
+		method.free()
 	}
 
 	return content

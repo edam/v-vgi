@@ -37,6 +37,20 @@ fn C.gi_property_info_get_flags(info &C.GIPropertyInfo) int
 fn C.gi_property_info_get_type_info(info &C.GIPropertyInfo) &C.GITypeInfo
 fn C.gi_type_info_get_tag(info &C.GITypeInfo) int
 
+// Function/callable info functions
+fn C.gi_callable_info_get_n_args(info &C.GICallableInfo) u32
+fn C.gi_callable_info_get_arg(info &C.GICallableInfo, n u32) &C.GIArgInfo
+fn C.gi_callable_info_get_return_type(info &C.GICallableInfo) &C.GITypeInfo
+fn C.gi_callable_info_may_return_null(info &C.GICallableInfo) bool
+fn C.gi_callable_info_skip_return(info &C.GICallableInfo) bool
+fn C.gi_function_info_get_symbol(info &C.GIFunctionInfo) &char
+fn C.gi_function_info_invoke(info &C.GIFunctionInfo, in_args &C.GIArgument, n_in_args int, out_args &C.GIArgument, n_out_args int, return_value &C.GIArgument, error &&C.GError) bool
+
+// Arg info functions
+fn C.gi_arg_info_get_direction(info &C.GIArgInfo) int
+fn C.gi_arg_info_get_type_info(info &C.GIArgInfo) &C.GITypeInfo
+fn C.gi_arg_info_may_be_null(info &C.GIArgInfo) bool
+
 // Error handling
 fn C.g_error_free(error &C.GError)
 
@@ -89,6 +103,12 @@ struct C.GIFunctionInfo {}
 struct C.GITypeInfo {}
 
 @[typedef]
+struct C.GICallableInfo {}
+
+@[typedef]
+struct C.GIArgInfo {}
+
+@[typedef]
 struct C.GError {
 	message &char
 }
@@ -102,9 +122,32 @@ struct C.GValue {
 	data   [2]u64
 }
 
+// GIArgument union for function invocation
+@[typedef]
+union C.GIArgument {
+	v_boolean  bool
+	v_int8     i8
+	v_uint8    u8
+	v_int16    i16
+	v_uint16   u16
+	v_int32    int
+	v_uint32   u32
+	v_int64    i64
+	v_uint64   u64
+	v_float    f32
+	v_double   f64
+	v_pointer  voidptr
+	v_string   &char
+}
+
 // Property flags
 const gi_property_readable = 1 << 0
 const gi_property_writable = 1 << 1
+
+// Argument direction
+const gi_direction_in = 0
+const gi_direction_out = 1
+const gi_direction_inout = 2
 
 // GITypeTag enum values
 const gi_type_tag_void = 0

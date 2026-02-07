@@ -155,6 +155,24 @@ pub fn (info ObjectInfo) get_property(n u32) ?PropertyInfo {
 	}
 }
 
+// get_n_methods returns the number of methods
+pub fn (info ObjectInfo) get_n_methods() u32 {
+	return C.gi_object_info_get_n_methods(&C.GIObjectInfo(info.ptr))
+}
+
+// get_method returns method info at index
+pub fn (info ObjectInfo) get_method(n u32) ?FunctionInfo {
+	method_ptr := C.gi_object_info_get_method(&C.GIObjectInfo(info.ptr), n)
+	if method_ptr == unsafe { nil } {
+		return none
+	}
+	return FunctionInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(method_ptr)
+		}
+	}
+}
+
 // PropertyInfo represents a GIPropertyInfo
 pub struct PropertyInfo {
 	BaseInfo
@@ -228,6 +246,91 @@ pub fn (info PropertyInfo) get_property_helper_name() string {
 	helper := type_info.to_property_helper_name()
 	type_info.free()
 	return helper
+}
+
+// FunctionInfo represents a GIFunctionInfo
+pub struct FunctionInfo {
+	BaseInfo
+}
+
+// get_n_args returns the number of arguments
+pub fn (info FunctionInfo) get_n_args() u32 {
+	return C.gi_callable_info_get_n_args(&C.GICallableInfo(info.ptr))
+}
+
+// get_arg returns argument info at index
+pub fn (info FunctionInfo) get_arg(n u32) ?ArgInfo {
+	arg_ptr := C.gi_callable_info_get_arg(&C.GICallableInfo(info.ptr), n)
+	if arg_ptr == unsafe { nil } {
+		return none
+	}
+	return ArgInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(arg_ptr)
+		}
+	}
+}
+
+// get_return_type returns the return type info
+pub fn (info FunctionInfo) get_return_type() TypeInfo {
+	type_ptr := C.gi_callable_info_get_return_type(&C.GICallableInfo(info.ptr))
+	return TypeInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(type_ptr)
+		}
+	}
+}
+
+// may_return_null returns true if function can return null
+pub fn (info FunctionInfo) may_return_null() bool {
+	return C.gi_callable_info_may_return_null(&C.GICallableInfo(info.ptr))
+}
+
+// skip_return returns true if return value should be skipped
+pub fn (info FunctionInfo) skip_return() bool {
+	return C.gi_callable_info_skip_return(&C.GICallableInfo(info.ptr))
+}
+
+// get_symbol returns the C symbol name for the function
+pub fn (info FunctionInfo) get_symbol() string {
+	symbol := C.gi_function_info_get_symbol(&C.GIFunctionInfo(info.ptr))
+	if symbol == unsafe { nil } {
+		return ''
+	}
+	return unsafe { cstring_to_vstring(symbol) }
+}
+
+// ArgInfo represents a GIArgInfo
+pub struct ArgInfo {
+	BaseInfo
+}
+
+// get_direction returns the argument direction (in/out/inout)
+pub fn (info ArgInfo) get_direction() int {
+	return C.gi_arg_info_get_direction(&C.GIArgInfo(info.ptr))
+}
+
+// get_type_info returns the type information for the argument
+pub fn (info ArgInfo) get_type_info() TypeInfo {
+	type_ptr := C.gi_arg_info_get_type_info(&C.GIArgInfo(info.ptr))
+	return TypeInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(type_ptr)
+		}
+	}
+}
+
+// may_be_null returns true if argument can be null
+pub fn (info ArgInfo) may_be_null() bool {
+	return C.gi_arg_info_may_be_null(&C.GIArgInfo(info.ptr))
+}
+
+// get_v_type returns the V type string for the argument
+pub fn (info ArgInfo) get_v_type() string {
+	type_info := info.get_type_info()
+	v_type := type_info.to_v_type()
+	type_info.free()
+	return v_type
 }
 
 // TypeInfo represents a GITypeInfo
