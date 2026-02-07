@@ -143,10 +143,17 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 		content += '\t${parent_embed}Properties\n'
 	}
 
-	// add properties
+	// add writable properties only
 	n_props := info.get_n_properties()
 	for i in 0 .. int(n_props) {
 		prop := info.get_property(u32(i)) or { continue }
+
+		// only include writable properties (can be set in constructor)
+		if !prop.is_writable() {
+			prop.free()
+			continue
+		}
+
 		prop_name := prop.get_name()
 
 		// convert kebab-case to snake_case
