@@ -58,6 +58,17 @@ Finally, run the `gen` script to generate bindings for V.
 
 ## Generate bindings
 
+### Max/OSX
+
+On my Mac, I had to help V find the pkgconfig file for `libffi`, which is a
+dependency of `girepository-2.0`
+
+``` Shell
+export PKG_CONFIG_PATH="/usr/local/Homebrew/Library/Homebrew/os/mac/pkgconfig/15"
+```
+
+### Then
+
 ``` Shell
 ~/.vmodules/edam/vgi/gen.vsh
 ```

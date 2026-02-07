@@ -1,16 +1,6 @@
 module vgi
 
-// GObject Introspection (girepository-2.0) C library bindings
-// Using manual flags because #pkgconfig can't resolve libffi dependency
-#flag darwin -I/usr/local/Cellar/glib/2.86.3/include
-#flag darwin -I/usr/local/Cellar/glib/2.86.3/include/glib-2.0
-#flag darwin -I/usr/local/Cellar/glib/2.86.3/lib/glib-2.0/include
-#flag darwin -I/usr/local/opt/gettext/include
-#flag darwin -I/usr/local/Cellar/pcre2/10.47/include
-#flag darwin -I/Library/Developer/CommandLineTools/SDKs/MacOSX15.sdk/usr/include/ffi
-#flag darwin -L/usr/local/Cellar/glib/2.86.3/lib
-#flag darwin -L/usr/local/opt/gettext/lib
-#flag darwin -lgirepository-2.0 -lgobject-2.0 -lglib-2.0 -lintl
+#pkgconfig --libs --cflags girepository-2.0
 
 #include <girepository/girepository.h>
 
