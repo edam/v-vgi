@@ -291,7 +291,6 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	content += generate_c_method_declarations(info)
 
 	// struct with embedded parent
-	content += '// ${object_name} struct\n'
 	content += 'pub struct ${object_name} {\n'
 	if parent_embed != '' {
 		content += '\t${parent_embed}\n'
@@ -320,8 +319,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 
 // generate_properties_struct generates [@params] properties struct
 fn generate_properties_struct(info ObjectInfo, object_name string, parent_name string, parent_embed string) string {
-	mut content := '// ${object_name}Properties for [@params] initialization\n'
-	content += '[@params]\n'
+	mut content := '[@params]\n'
 	content += 'pub struct ${object_name}Properties {\n'
 
 	if parent_embed != '' {
@@ -358,8 +356,7 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 
 // generate_constructor generates Object.new() constructor stub
 fn generate_constructor(object_name string) string {
-	mut content := '// new creates a new ${object_name}\n'
-	content += 'pub fn ${object_name}.new(properties ${object_name}Properties) &${object_name} {\n'
+	mut content := 'pub fn ${object_name}.new(properties ${object_name}Properties) &${object_name} {\n'
 	content += '\t// TODO: Implement object construction with properties\n'
 	content += '\tpanic("${object_name}.new() not yet implemented")\n'
 	content += '}\n\n'
@@ -382,7 +379,6 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 
 		// getter if readable
 		if prop.is_readable() {
-			content += '// get_${v_prop_name} gets the ${prop_name} property\n'
 			content += 'pub fn (obj &${object_name}) get_${v_prop_name}() ${v_type} {\n'
 			content += '\treturn get_${helper}_property(obj.ptr, \'${prop_name}\')\n'
 			content += '}\n\n'
@@ -390,7 +386,6 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 
 		// setter if writable
 		if prop.is_writable() {
-			content += '// set_${v_prop_name} sets the ${prop_name} property\n'
 			content += 'pub fn (obj &${object_name}) set_${v_prop_name}(value ${v_type}) {\n'
 			content += '\tset_${helper}_property(obj.ptr, \'${prop_name}\', value)\n'
 			content += '}\n\n'
@@ -424,10 +419,7 @@ fn generate_c_method_declarations(info ObjectInfo) string {
 			continue
 		}
 
-		if !has_methods {
-			content += '// C method declarations\n'
-			has_methods = true
-		}
+		has_methods = true
 
 		// build C parameter list
 		mut c_params := ['obj voidptr']
@@ -549,8 +541,6 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		needs_string_conv := return_v_type == 'string'
 
 		// generate method signature
-		content += '// ${v_method_name} wraps ${method_name}\n'
-
 		if skip_return || return_v_type == 'voidptr' {
 			// void return
 			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) {\n'
