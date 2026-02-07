@@ -3,3 +3,6 @@
 .\#*
 .claude
 CLAUDE.md
+
+# Generated binding directories (e.g., gtk_4_0/, glib_2_0/)
+*_[0-9]*_[0-9]*/

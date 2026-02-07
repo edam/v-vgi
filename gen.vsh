@@ -78,9 +78,78 @@ fn main() {
 		exit(0)
 	}
 
-	if opts.verbose {
-		println('debug: printing message')
+	// Generate bindings
+	generate_bindings(library, version, opts.verbose)
+}
+
+fn get_binding_dir_name(library string, version string) string {
+	// Convert "Gtk-4.0" to "gtk_4_0"
+	lib_lower := library.to_lower().replace('-', '_')
+	ver_lower := version.replace('.', '_').replace('-', '_')
+	return '${lib_lower}_${ver_lower}'
+}
+
+fn generate_bindings(library string, version string, verbose bool) {
+	repo := vgi.get_default_repository()
+
+	// Load the library
+	repo.require(library, version) or {
+		eprintln('Error: Failed to load library ${library}-${version}')
+		eprintln('${err}')
+		exit(1)
 	}
+
+	if verbose {
+		println('Loaded ${library}-${version}')
+	}
+
+	// Get directory name for bindings
+	dir_name := get_binding_dir_name(library, version)
+	binding_dir := vgi.get_vmod_path(dir_name)
+
+	if verbose {
+		println('Generating bindings in: ${binding_dir}')
+	}
+
+	// Create or empty the directory
+	if os.exists(binding_dir) {
+		if verbose {
+			println('Directory exists, emptying it')
+		}
+		os.rmdir_all(binding_dir) or {
+			eprintln('Error: Failed to remove existing directory ${binding_dir}')
+			eprintln('${err}')
+			exit(1)
+		}
+	}
+
+	os.mkdir_all(binding_dir) or {
+		eprintln('Error: Failed to create directory ${binding_dir}')
+		eprintln('${err}')
+		exit(1)
+	}
+
+	// Write README.md
+	readme_path := os.join_path(binding_dir, 'README.md')
+	typelib_path := repo.get_typelib_path(library)
+	loaded_version := repo.get_version(library)
+
+	readme_content := 'Library: ${library}
+Typelib: ${typelib_path}
+Version: ${loaded_version}
+'
+
+	os.write_file(readme_path, readme_content) or {
+		eprintln('Error: Failed to write README.md')
+		eprintln('${err}')
+		exit(1)
+	}
+
+	if verbose {
+		println('Wrote ${readme_path}')
+	}
+
+	println('Generated bindings for ${library}-${version} in ${dir_name}/')
 }
 
 fn show_info(library string, version string, verbose bool) {
