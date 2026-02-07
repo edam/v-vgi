@@ -3,6 +3,7 @@
 import os
 import regex
 import edam.ggetopt
+import edam.vgi
 
 const description = 'GObject introspection bindings (re)generator for V'
 const options = [
@@ -26,14 +27,9 @@ mut:
 	verbose bool
 }
 
-fn get_vmod_path(rel_path string) string {
-	vmod_path := os.dir(@FILE)
-	return os.join_path(vmod_path, rel_path)
-}
-
 fn get_version() string {
 	mut re := regex.regex_opt(r".*version: *'([0-9.]+)'.*") or { return '' }
-	vmod := os.read_lines(get_vmod_path('v.mod')) or { return 'unknown' }
+	vmod := os.read_lines(vgi.get_vmod_path('v.mod')) or { return 'unknown' }
 	for line in vmod {
 		if re.matches_string(line) {
 			return re.get_group_by_id(line, 0)
@@ -72,6 +68,4 @@ fn main() {
 	if opts.verbose {
 		println('debug: printing message')
 	}
-	path := os.dir(@FILE)
-	println(path)
 }
