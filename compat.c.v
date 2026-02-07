@@ -17,6 +17,7 @@ fn C.gi_typelib_get_namespace(typelib &C.GITypelib) &char
 
 // Info functions
 fn C.gi_base_info_get_name(info &C.GIBaseInfo) &char
+fn C.gi_base_info_get_namespace(info &C.GIBaseInfo) &char
 fn C.gi_base_info_unref(info voidptr)
 
 // GObject type system functions for determining info type

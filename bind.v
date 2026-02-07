@@ -78,29 +78,48 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	object_name := info.get_name()
 	file_name := object_name.to_lower() + '.v'
 	file_path := os.join_path(binding_dir, file_name)
+	current_namespace := info.get_namespace()
 
-	mut content := 'module ${os.file_name(binding_dir)}\n\n'
+	mut content := 'module ${os.file_name(binding_dir)}\n'
 
-	// get parent
+	// get parent and check if cross-namespace
 	parent := info.get_parent()
-	parent_name := if p := parent {
-		p.get_name()
-	} else {
-		''
+	mut parent_embed := ''
+	mut parent_name := ''
+
+	if p := parent {
+		parent_name = p.get_name()
+		parent_namespace := p.get_namespace()
+
+		if parent_namespace != current_namespace {
+			// cross-namespace parent - need import
+			repo := get_default_repository()
+			parent_version := repo.get_version(parent_namespace)
+			parent_module := get_binding_dir_name(parent_namespace, parent_version)
+			module_alias := parent_namespace.to_lower()
+
+			content += '\nimport edam.vgi.${parent_module} as ${module_alias}\n'
+			parent_embed = '${module_alias}.${parent_name}'
+		} else {
+			// same namespace - direct embed
+			parent_embed = parent_name
+		}
 	}
+
+	content += '\n'
 
 	// struct with embedded parent
 	content += '// ${object_name} struct\n'
 	content += 'pub struct ${object_name} {\n'
-	if parent_name != '' {
-		content += '\t${parent_name}\n'
+	if parent_embed != '' {
+		content += '\t${parent_embed}\n'
 	} else {
 		content += '\tptr voidptr\n'
 	}
 	content += '}\n\n'
 
 	// properties struct
-	content += generate_properties_struct(info, object_name, parent_name)
+	content += generate_properties_struct(info, object_name, parent_name, parent_embed)
 
 	// constructor
 	content += generate_constructor(object_name)
@@ -115,13 +134,13 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 }
 
 // generate_properties_struct generates [@params] properties struct
-fn generate_properties_struct(info ObjectInfo, object_name string, parent_name string) string {
+fn generate_properties_struct(info ObjectInfo, object_name string, parent_name string, parent_embed string) string {
 	mut content := '// ${object_name}Properties for [@params] initialization\n'
 	content += '[@params]\n'
 	content += 'pub struct ${object_name}Properties {\n'
 
-	if parent_name != '' {
-		content += '\t${parent_name}Properties\n'
+	if parent_embed != '' {
+		content += '\t${parent_embed}Properties\n'
 	}
 
 	// add properties

@@ -82,6 +82,15 @@ pub fn (info BaseInfo) get_name() string {
 	return unsafe { cstring_to_vstring(name) }
 }
 
+// get_namespace returns the namespace of the info
+pub fn (info BaseInfo) get_namespace() string {
+	namespace := C.gi_base_info_get_namespace(info.ptr)
+	if namespace == unsafe { nil } {
+		return ''
+	}
+	return unsafe { cstring_to_vstring(namespace) }
+}
+
 // get_type_name returns the GObject type name of the info (e.g., "GIFunctionInfo", "GIObjectInfo")
 pub fn (info BaseInfo) get_type_name() string {
 	type_name := C.G_OBJECT_TYPE_NAME(info.ptr)
