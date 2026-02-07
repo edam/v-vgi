@@ -30,6 +30,9 @@ fn C.gi_object_info_get_property(info &C.GIObjectInfo, n u32) &C.GIPropertyInfo
 fn C.gi_object_info_get_n_methods(info &C.GIObjectInfo) u32
 fn C.gi_object_info_get_method(info &C.GIObjectInfo, n u32) &C.GIFunctionInfo
 
+// Registered type info functions
+fn C.gi_registered_type_info_get_type_init_function_name(info &C.GIRegisteredTypeInfo) &char
+
 // Property info functions
 fn C.gi_property_info_get_flags(info &C.GIPropertyInfo) int
 
@@ -55,6 +58,7 @@ fn C.gi_arg_info_may_be_null(info &C.GIArgInfo) bool
 fn C.g_error_free(error &C.GError)
 
 // GObject property access
+fn C.g_object_new(object_type u64, first_property_name &char) &C.GObject
 fn C.g_object_get_property(object &C.GObject, property_name &char, value &C.GValue)
 fn C.g_object_set_property(object &C.GObject, property_name &char, value &C.GValue)
 
@@ -92,6 +96,9 @@ struct C.GIBaseInfo {}
 
 @[typedef]
 struct C.GIObjectInfo {}
+
+@[typedef]
+struct C.GIRegisteredTypeInfo {}
 
 @[typedef]
 struct C.GIPropertyInfo {}

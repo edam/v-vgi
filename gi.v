@@ -173,6 +173,15 @@ pub fn (info ObjectInfo) get_method(n u32) ?FunctionInfo {
 	}
 }
 
+// get_type_init returns the type initialization function name
+pub fn (info ObjectInfo) get_type_init() string {
+	type_init := C.gi_registered_type_info_get_type_init_function_name(&C.GIRegisteredTypeInfo(info.ptr))
+	if type_init == unsafe { nil } {
+		return ''
+	}
+	return unsafe { cstring_to_vstring(type_init) }
+}
+
 // PropertyInfo represents a GIPropertyInfo
 pub struct PropertyInfo {
 	BaseInfo

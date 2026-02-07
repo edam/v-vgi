@@ -287,7 +287,11 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 
 	content += '\n'
 
-	// generate C function declarations for methods
+	// generate C function declarations
+	type_init := info.get_type_init()
+	if type_init != '' {
+		content += 'fn C.${type_init}() u64\n'
+	}
 	content += generate_c_method_declarations(info)
 
 	// struct with embedded parent
@@ -303,7 +307,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	content += generate_properties_struct(info, object_name, parent_name, parent_embed)
 
 	// constructor
-	content += generate_constructor(object_name)
+	content += generate_constructor(info, object_name)
 
 	// property methods
 	content += generate_property_methods(info, object_name)
@@ -354,11 +358,43 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 	return content
 }
 
-// generate_constructor generates Object.new() constructor stub
-fn generate_constructor(object_name string) string {
+// generate_constructor generates Object.new() constructor
+fn generate_constructor(info ObjectInfo, object_name string) string {
+	type_init := info.get_type_init()
+	if type_init == '' {
+		// no type init function, generate stub
+		mut content := 'pub fn ${object_name}.new(properties ${object_name}Properties) &${object_name} {\n'
+		content += '\tpanic("${object_name}.new() not yet implemented - no type init")\n'
+		content += '}\n\n'
+		return content
+	}
+
 	mut content := 'pub fn ${object_name}.new(properties ${object_name}Properties) &${object_name} {\n'
-	content += '\t// TODO: Implement object construction with properties\n'
-	content += '\tpanic("${object_name}.new() not yet implemented")\n'
+	content += '\tobj_ptr := C.g_object_new(C.${type_init}(), unsafe { nil })\n'
+	content += '\tobj := &${object_name}{ptr: obj_ptr}\n'
+
+	// set each property if provided
+	n_props := info.get_n_properties()
+	for i in 0 .. int(n_props) {
+		prop := info.get_property(u32(i)) or { continue }
+
+		// only writable properties are in the Properties struct
+		if !prop.is_writable() {
+			prop.free()
+			continue
+		}
+
+		prop_name := prop.get_name()
+		v_prop_name := prop_name.replace('-', '_')
+
+		content += '\tif val := properties.${v_prop_name} {\n'
+		content += '\t\tobj.set_${v_prop_name}(val)\n'
+		content += '\t}\n'
+
+		prop.free()
+	}
+
+	content += '\treturn obj\n'
 	content += '}\n\n'
 	return content
 }
