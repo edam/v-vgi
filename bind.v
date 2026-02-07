@@ -40,21 +40,13 @@ pub fn generate_bindings(library string, version string) {
 		exit(1)
 	}
 
-	// Write README.md
-	readme_path := os.join_path(binding_dir, 'README.md')
+	// get metadata for generation
 	typelib_path := repo.get_typelib_path(library)
 	loaded_version := repo.get_version(library)
 
-	readme_content := 'Library: ${library}
-Version: ${loaded_version}
-Typelib: ${typelib_path}
-'
-
-	os.write_file(readme_path, readme_content) or {
-		eprintln('Error: Failed to write README.md')
-		eprintln('${err}')
-		exit(1)
-	}
+	// generate helper files
+	generate_readme(binding_dir, library, loaded_version, typelib_path)
+	generate_v_util(binding_dir)
 
 	// generate object bindings
 	n_infos := repo.get_n_infos(library)
@@ -71,6 +63,193 @@ Typelib: ${typelib_path}
 	}
 
 	println('Generated bindings for ${library}-${version} in ${dir_name}/')
+}
+
+// generate_readme generates README.md with binding metadata
+fn generate_readme(binding_dir string, library string, version string, typelib_path string) {
+	readme_path := os.join_path(binding_dir, 'README.md')
+
+	readme_content := 'Library: ${library}
+Version: ${version}
+Typelib: ${typelib_path}
+'
+
+	os.write_file(readme_path, readme_content) or {
+		eprintln('Error: Failed to write README.md')
+		eprintln('${err}')
+		exit(1)
+	}
+}
+
+// generate_v_util generates helper functions for property access
+fn generate_v_util(binding_dir string) {
+	util_path := os.join_path(binding_dir, 'v_util.v')
+	module_name := os.file_name(binding_dir)
+
+	mut content := 'module ${module_name}
+
+import edam.vgi
+
+// helper functions for property access
+
+fn get_bool_property(obj voidptr, prop_name string) bool {
+	mut value := C.GValue{}
+	C.g_value_init(&value, C.g_type_boolean)
+	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	result := C.g_value_get_boolean(&value)
+	C.g_value_unset(&value)
+	return result
+}
+
+fn set_bool_property(obj voidptr, prop_name string, val bool) {
+	mut gvalue := C.GValue{}
+	C.g_value_init(&gvalue, C.g_type_boolean)
+	C.g_value_set_boolean(&gvalue, val)
+	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	C.g_value_unset(&gvalue)
+}
+
+fn get_int_property(obj voidptr, prop_name string) int {
+	mut value := C.GValue{}
+	C.g_value_init(&value, C.g_type_int)
+	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	result := C.g_value_get_int(&value)
+	C.g_value_unset(&value)
+	return result
+}
+
+fn set_int_property(obj voidptr, prop_name string, val int) {
+	mut gvalue := C.GValue{}
+	C.g_value_init(&gvalue, C.g_type_int)
+	C.g_value_set_int(&gvalue, val)
+	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	C.g_value_unset(&gvalue)
+}
+
+fn get_uint_property(obj voidptr, prop_name string) u32 {
+	mut value := C.GValue{}
+	C.g_value_init(&value, C.g_type_uint)
+	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	result := C.g_value_get_uint(&value)
+	C.g_value_unset(&value)
+	return result
+}
+
+fn set_uint_property(obj voidptr, prop_name string, val u32) {
+	mut gvalue := C.GValue{}
+	C.g_value_init(&gvalue, C.g_type_uint)
+	C.g_value_set_uint(&gvalue, val)
+	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	C.g_value_unset(&gvalue)
+}
+
+fn get_int64_property(obj voidptr, prop_name string) i64 {
+	mut value := C.GValue{}
+	C.g_value_init(&value, C.g_type_int64)
+	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	result := C.g_value_get_int64(&value)
+	C.g_value_unset(&value)
+	return result
+}
+
+fn set_int64_property(obj voidptr, prop_name string, val i64) {
+	mut gvalue := C.GValue{}
+	C.g_value_init(&gvalue, C.g_type_int64)
+	C.g_value_set_int64(&gvalue, val)
+	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	C.g_value_unset(&gvalue)
+}
+
+fn get_uint64_property(obj voidptr, prop_name string) u64 {
+	mut value := C.GValue{}
+	C.g_value_init(&value, C.g_type_uint64)
+	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	result := C.g_value_get_uint64(&value)
+	C.g_value_unset(&value)
+	return result
+}
+
+fn set_uint64_property(obj voidptr, prop_name string, val u64) {
+	mut gvalue := C.GValue{}
+	C.g_value_init(&gvalue, C.g_type_uint64)
+	C.g_value_set_uint64(&gvalue, val)
+	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	C.g_value_unset(&gvalue)
+}
+
+fn get_float_property(obj voidptr, prop_name string) f32 {
+	mut value := C.GValue{}
+	C.g_value_init(&value, C.g_type_float)
+	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	result := C.g_value_get_float(&value)
+	C.g_value_unset(&value)
+	return result
+}
+
+fn set_float_property(obj voidptr, prop_name string, val f32) {
+	mut gvalue := C.GValue{}
+	C.g_value_init(&gvalue, C.g_type_float)
+	C.g_value_set_float(&gvalue, val)
+	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	C.g_value_unset(&gvalue)
+}
+
+fn get_double_property(obj voidptr, prop_name string) f64 {
+	mut value := C.GValue{}
+	C.g_value_init(&value, C.g_type_double)
+	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	result := C.g_value_get_double(&value)
+	C.g_value_unset(&value)
+	return result
+}
+
+fn set_double_property(obj voidptr, prop_name string, val f64) {
+	mut gvalue := C.GValue{}
+	C.g_value_init(&gvalue, C.g_type_double)
+	C.g_value_set_double(&gvalue, val)
+	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	C.g_value_unset(&gvalue)
+}
+
+fn get_string_property(obj voidptr, prop_name string) string {
+	mut value := C.GValue{}
+	C.g_value_init(&value, C.g_type_string)
+	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	result := unsafe { cstring_to_vstring(C.g_value_get_string(&value)) }
+	C.g_value_unset(&value)
+	return result
+}
+
+fn set_string_property(obj voidptr, prop_name string, val string) {
+	mut gvalue := C.GValue{}
+	C.g_value_init(&gvalue, C.g_type_string)
+	C.g_value_set_string(&gvalue, val.str)
+	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	C.g_value_unset(&gvalue)
+}
+
+fn get_pointer_property(obj voidptr, prop_name string) voidptr {
+	mut value := C.GValue{}
+	C.g_value_init(&value, C.g_type_pointer)
+	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	result := C.g_value_get_pointer(&value)
+	C.g_value_unset(&value)
+	return result
+}
+
+fn set_pointer_property(obj voidptr, prop_name string, val voidptr) {
+	mut gvalue := C.GValue{}
+	C.g_value_init(&gvalue, C.g_type_pointer)
+	C.g_value_set_pointer(&gvalue, val)
+	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	C.g_value_unset(&gvalue)
+}
+'
+
+	os.write_file(util_path, content) or {
+		eprintln('Warning: Failed to write ${util_path}')
+		return
+	}
 }
 
 // generate_object_binding generates V file for an object
@@ -191,15 +370,15 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 		prop_name := prop.get_name()
 		v_prop_name := prop_name.replace('-', '_')
 
-		// get property type
+		// get property type and helper name
 		v_type := prop.get_v_type()
+		helper := prop.get_property_helper_name()
 
 		// getter if readable
 		if prop.is_readable() {
 			content += '// get_${v_prop_name} gets the ${prop_name} property\n'
 			content += 'pub fn (obj &${object_name}) get_${v_prop_name}() ${v_type} {\n'
-			content += '\t// TODO: Implement property getter\n'
-			content += '\tpanic("get_${v_prop_name}() not yet implemented")\n'
+			content += '\treturn get_${helper}_property(obj.ptr, \'${prop_name}\')\n'
 			content += '}\n\n'
 		}
 
@@ -207,8 +386,7 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 		if prop.is_writable() {
 			content += '// set_${v_prop_name} sets the ${prop_name} property\n'
 			content += 'pub fn (obj &${object_name}) set_${v_prop_name}(value ${v_type}) {\n'
-			content += '\t// TODO: Implement property setter\n'
-			content += '\tpanic("set_${v_prop_name}() not yet implemented")\n'
+			content += '\tset_${helper}_property(obj.ptr, \'${prop_name}\', value)\n'
 			content += '}\n\n'
 		}
 

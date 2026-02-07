@@ -190,6 +190,46 @@ pub fn (info PropertyInfo) get_v_type() string {
 	return v_type
 }
 
+// get_gtype_constant returns the GType constant name
+pub fn (info PropertyInfo) get_gtype_constant() string {
+	type_info := info.get_type_info()
+	gtype := type_info.to_gtype_constant()
+	type_info.free()
+	return gtype
+}
+
+// get_gvalue_getter returns the g_value_get_* function name
+pub fn (info PropertyInfo) get_gvalue_getter() string {
+	type_info := info.get_type_info()
+	getter := type_info.to_gvalue_getter()
+	type_info.free()
+	return getter
+}
+
+// get_gvalue_setter returns the g_value_set_* function name
+pub fn (info PropertyInfo) get_gvalue_setter() string {
+	type_info := info.get_type_info()
+	setter := type_info.to_gvalue_setter()
+	type_info.free()
+	return setter
+}
+
+// needs_string_conversion returns true if property needs cstring conversion
+pub fn (info PropertyInfo) needs_string_conversion() bool {
+	type_info := info.get_type_info()
+	needs := type_info.needs_string_conversion()
+	type_info.free()
+	return needs
+}
+
+// get_property_helper_name returns the helper function name prefix
+pub fn (info PropertyInfo) get_property_helper_name() string {
+	type_info := info.get_type_info()
+	helper := type_info.to_property_helper_name()
+	type_info.free()
+	return helper
+}
+
 // TypeInfo represents a GITypeInfo
 pub struct TypeInfo {
 	BaseInfo
@@ -219,5 +259,77 @@ pub fn (info TypeInfo) to_v_type() string {
 		gi_type_tag_utf8, gi_type_tag_filename { 'string' }
 		gi_type_tag_gtype { 'u64' } // GType is typedef'd as size_t
 		else { 'voidptr' } // TODO: handle arrays, interfaces, lists, etc.
+	}
+}
+
+// to_gtype_constant returns the GType constant name for code generation
+pub fn (info TypeInfo) to_gtype_constant() string {
+	tag := info.get_tag()
+	return match tag {
+		gi_type_tag_void { 'g_type_pointer' }
+		gi_type_tag_boolean { 'g_type_boolean' }
+		gi_type_tag_int8, gi_type_tag_int16, gi_type_tag_int32 { 'g_type_int' }
+		gi_type_tag_uint8, gi_type_tag_uint16, gi_type_tag_uint32 { 'g_type_uint' }
+		gi_type_tag_int64 { 'g_type_int64' }
+		gi_type_tag_uint64 { 'g_type_uint64' }
+		gi_type_tag_float { 'g_type_float' }
+		gi_type_tag_double { 'g_type_double' }
+		gi_type_tag_utf8, gi_type_tag_filename { 'g_type_string' }
+		gi_type_tag_gtype { 'g_type_uint64' }
+		else { 'g_type_pointer' }
+	}
+}
+
+// to_gvalue_getter returns the g_value_get_* function name
+pub fn (info TypeInfo) to_gvalue_getter() string {
+	tag := info.get_tag()
+	return match tag {
+		gi_type_tag_boolean { 'g_value_get_boolean' }
+		gi_type_tag_int8, gi_type_tag_int16, gi_type_tag_int32 { 'g_value_get_int' }
+		gi_type_tag_uint8, gi_type_tag_uint16, gi_type_tag_uint32 { 'g_value_get_uint' }
+		gi_type_tag_int64 { 'g_value_get_int64' }
+		gi_type_tag_uint64, gi_type_tag_gtype { 'g_value_get_uint64' }
+		gi_type_tag_float { 'g_value_get_float' }
+		gi_type_tag_double { 'g_value_get_double' }
+		gi_type_tag_utf8, gi_type_tag_filename { 'g_value_get_string' }
+		else { 'g_value_get_pointer' }
+	}
+}
+
+// to_gvalue_setter returns the g_value_set_* function name
+pub fn (info TypeInfo) to_gvalue_setter() string {
+	tag := info.get_tag()
+	return match tag {
+		gi_type_tag_boolean { 'g_value_set_boolean' }
+		gi_type_tag_int8, gi_type_tag_int16, gi_type_tag_int32 { 'g_value_set_int' }
+		gi_type_tag_uint8, gi_type_tag_uint16, gi_type_tag_uint32 { 'g_value_set_uint' }
+		gi_type_tag_int64 { 'g_value_set_int64' }
+		gi_type_tag_uint64, gi_type_tag_gtype { 'g_value_set_uint64' }
+		gi_type_tag_float { 'g_value_set_float' }
+		gi_type_tag_double { 'g_value_set_double' }
+		gi_type_tag_utf8, gi_type_tag_filename { 'g_value_set_string' }
+		else { 'g_value_set_pointer' }
+	}
+}
+
+// needs_string_conversion returns true if the type needs cstring conversion
+pub fn (info TypeInfo) needs_string_conversion() bool {
+	tag := info.get_tag()
+	return tag == gi_type_tag_utf8 || tag == gi_type_tag_filename
+}
+
+// to_property_helper_name returns the helper function name prefix (e.g., "bool", "int", "string")
+pub fn (info TypeInfo) to_property_helper_name() string {
+	tag := info.get_tag()
+	return match tag {
+		gi_type_tag_boolean { 'bool' }
+		gi_type_tag_int8, gi_type_tag_int16, gi_type_tag_int32 { 'int' }
+		gi_type_tag_uint8, gi_type_tag_uint16, gi_type_tag_uint32 { 'uint' }
+		gi_type_tag_int64 { 'int64' }
+		gi_type_tag_uint64, gi_type_tag_gtype { 'uint64' }
+		gi_type_tag_float { 'float' }
+		gi_type_tag_double { 'double' }
+		gi_type_tag_utf8, gi_type_tag_filename { 'string' }
+		else { 'pointer' }
 	}
 }
