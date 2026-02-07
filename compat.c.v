@@ -70,3 +70,27 @@ struct C.GError {
 // Property flags
 const gi_property_readable = 1 << 0
 const gi_property_writable = 1 << 1
+
+// GITypeTag enum values
+const gi_type_tag_void = 0
+const gi_type_tag_boolean = 1
+const gi_type_tag_int8 = 2
+const gi_type_tag_uint8 = 3
+const gi_type_tag_int16 = 4
+const gi_type_tag_uint16 = 5
+const gi_type_tag_int32 = 6
+const gi_type_tag_uint32 = 7
+const gi_type_tag_int64 = 8
+const gi_type_tag_uint64 = 9
+const gi_type_tag_float = 10
+const gi_type_tag_double = 11
+const gi_type_tag_gtype = 12
+const gi_type_tag_utf8 = 13
+const gi_type_tag_filename = 14
+const gi_type_tag_array = 15
+const gi_type_tag_interface = 16
+const gi_type_tag_glist = 17
+const gi_type_tag_gslist = 18
+const gi_type_tag_ghash = 19
+const gi_type_tag_error = 20
+const gi_type_tag_unichar = 21

@@ -171,3 +171,53 @@ pub fn (info PropertyInfo) is_writable() bool {
 	flags := C.gi_property_info_get_flags(&C.GIPropertyInfo(info.ptr))
 	return (flags & gi_property_writable) != 0
 }
+
+// get_type_info returns the type information for the property
+pub fn (info PropertyInfo) get_type_info() TypeInfo {
+	type_ptr := C.gi_property_info_get_type_info(&C.GIPropertyInfo(info.ptr))
+	return TypeInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(type_ptr)
+		}
+	}
+}
+
+// get_v_type returns the V type string for the property
+pub fn (info PropertyInfo) get_v_type() string {
+	type_info := info.get_type_info()
+	v_type := type_info.to_v_type()
+	type_info.free()
+	return v_type
+}
+
+// TypeInfo represents a GITypeInfo
+pub struct TypeInfo {
+	BaseInfo
+}
+
+// get_tag returns the type tag
+pub fn (info TypeInfo) get_tag() int {
+	return C.gi_type_info_get_tag(&C.GITypeInfo(info.ptr))
+}
+
+// to_v_type converts the type to a V type string for use in generated code
+pub fn (info TypeInfo) to_v_type() string {
+	tag := info.get_tag()
+	return match tag {
+		gi_type_tag_void { 'voidptr' }
+		gi_type_tag_boolean { 'bool' }
+		gi_type_tag_int8 { 'i8' }
+		gi_type_tag_uint8 { 'u8' }
+		gi_type_tag_int16 { 'i16' }
+		gi_type_tag_uint16 { 'u16' }
+		gi_type_tag_int32 { 'int' }
+		gi_type_tag_uint32 { 'u32' }
+		gi_type_tag_int64 { 'i64' }
+		gi_type_tag_uint64 { 'u64' }
+		gi_type_tag_float { 'f32' }
+		gi_type_tag_double { 'f64' }
+		gi_type_tag_utf8, gi_type_tag_filename { 'string' }
+		gi_type_tag_gtype { 'u64' } // GType is typedef'd as size_t
+		else { 'voidptr' } // TODO: handle arrays, interfaces, lists, etc.
+	}
+}

@@ -159,8 +159,10 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 		// convert kebab-case to snake_case
 		v_prop_name := prop_name.replace('-', '_')
 
-		// TODO: proper type mapping, using string for now
-		content += '\t${v_prop_name} ?string\n'
+		// get property type
+		v_type := prop.get_v_type()
+
+		content += '\t${v_prop_name} ?${v_type}\n'
 
 		prop.free()
 	}
@@ -189,10 +191,13 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 		prop_name := prop.get_name()
 		v_prop_name := prop_name.replace('-', '_')
 
+		// get property type
+		v_type := prop.get_v_type()
+
 		// getter if readable
 		if prop.is_readable() {
 			content += '// get_${v_prop_name} gets the ${prop_name} property\n'
-			content += 'pub fn (obj &${object_name}) get_${v_prop_name}() string {\n'
+			content += 'pub fn (obj &${object_name}) get_${v_prop_name}() ${v_type} {\n'
 			content += '\t// TODO: Implement property getter\n'
 			content += '\tpanic("get_${v_prop_name}() not yet implemented")\n'
 			content += '}\n\n'
@@ -201,7 +206,7 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 		// setter if writable
 		if prop.is_writable() {
 			content += '// set_${v_prop_name} sets the ${prop_name} property\n'
-			content += 'pub fn (obj &${object_name}) set_${v_prop_name}(value string) {\n'
+			content += 'pub fn (obj &${object_name}) set_${v_prop_name}(value ${v_type}) {\n'
 			content += '\t// TODO: Implement property setter\n'
 			content += '\tpanic("set_${v_prop_name}() not yet implemented")\n'
 			content += '}\n\n'
