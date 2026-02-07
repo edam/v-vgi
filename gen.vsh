@@ -12,6 +12,7 @@ const options = [
 	ggetopt.text('Usage: ${ggetopt.prog()} LIBRARY VERSION'),
 	ggetopt.text(),
 	ggetopt.text('Options:'),
+	ggetopt.opt('info', `i`).help('display information about the library'),
 	ggetopt.opt('verbose', none).help('show debug information'),
 	ggetopt.opt_help(),
 	ggetopt.opt_version(),
@@ -24,6 +25,7 @@ const options = [
 @[heap]
 struct Options {
 mut:
+	info    bool
 	verbose bool
 }
 
@@ -40,6 +42,9 @@ fn get_version() string {
 
 fn (mut o Options) process_arg(arg string, val ?string) ! {
 	match arg {
+		'info' {
+			o.info = true
+		}
 		'verbose' {
 			o.verbose = true
 		}
@@ -65,7 +70,96 @@ fn main() {
 		ggetopt.die_hint('too few arguments on command line')
 	}
 
+	library := args[0]
+	version := args[1]
+
+	if opts.info {
+		show_info(library, version, opts.verbose)
+		exit(0)
+	}
+
 	if opts.verbose {
 		println('debug: printing message')
+	}
+}
+
+fn show_info(library string, version string, verbose bool) {
+	repo := vgi.get_default_repository()
+
+	// Try to load the library
+	repo.require(library, version) or {
+		eprintln('Error: Failed to load library ${library}-${version}')
+		eprintln('${err}')
+		exit(1)
+	}
+
+	println('Library found: ${library}-${version}')
+
+	// Get the typelib path
+	path := repo.get_typelib_path(library)
+	if path != '' {
+		println('Typelib path: ${path}')
+	}
+
+	// Get the actual loaded version
+	loaded_version := repo.get_version(library)
+	if loaded_version != '' {
+		println('Loaded version: ${loaded_version}')
+	}
+
+	// Get metadata count and iterate through entries
+	n_infos := repo.get_n_infos(library)
+	println('Metadata entries: ${n_infos}')
+
+	// Collect entries by type
+	mut counts := map[string]int{}
+	mut entries_by_type := map[string][]string{}
+
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info(library, i) or { continue }
+		type_str := info.get_type()
+		name := info.get_name()
+
+		counts[type_str] = counts[type_str] + 1
+		if entries_by_type[type_str].len < 3 {
+			entries_by_type[type_str] << name
+		}
+
+		info.free()
+	}
+
+	// Display summary by type
+	println('\nContents:')
+	type_labels := {
+		'object':    'objects'
+		'interface': 'interfaces'
+		'struct':    'structs'
+		'enum':      'enums'
+		'flags':     'flags'
+		'function':  'functions'
+		'callback':  'callbacks'
+		'constant':  'constants'
+		'union':     'unions'
+	}
+
+	for type_key in ['object', 'interface', 'struct', 'enum', 'flags', 'function', 'callback', 'constant', 'union'] {
+		if type_key in counts {
+			count := counts[type_key]
+			examples := entries_by_type[type_key]
+			label := type_labels[type_key]
+			print('  ${label}: ${count}')
+			if examples.len > 0 {
+				print(' (e.g., ${examples.join(', ')}')
+				if count > examples.len {
+					print(', ...')
+				}
+				print(')')
+			}
+			println('')
+		}
+	}
+
+	if verbose {
+		println('\nDebug: Successfully loaded and queried ${library}-${version}')
 	}
 }
