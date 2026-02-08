@@ -62,6 +62,14 @@ fn C.gi_interface_info_get_method(info &C.GIInterfaceInfo, n u32) &C.GIFunctionI
 fn C.gi_interface_info_get_n_prerequisites(info &C.GIInterfaceInfo) u32
 fn C.gi_interface_info_get_prerequisite(info &C.GIInterfaceInfo, n u32) &C.GIBaseInfo
 
+// Enum info functions
+fn C.gi_enum_info_get_n_values(info &C.GIEnumInfo) u32
+fn C.gi_enum_info_get_value(info &C.GIEnumInfo, n u32) &C.GIValueInfo
+fn C.gi_enum_info_get_storage_type(info &C.GIEnumInfo) int
+
+// Value info functions
+fn C.gi_value_info_get_value(info &C.GIValueInfo) i64
+
 // Error handling
 fn C.g_error_free(error &C.GError)
 
@@ -125,6 +133,12 @@ struct C.GIArgInfo {}
 
 @[typedef]
 struct C.GIInterfaceInfo {}
+
+@[typedef]
+struct C.GIEnumInfo {}
+
+@[typedef]
+struct C.GIValueInfo {}
 
 @[typedef]
 struct C.GError {

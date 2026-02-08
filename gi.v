@@ -373,6 +373,51 @@ pub fn (info InterfaceInfo) get_prerequisite(n u32) ?BaseInfo {
 	}
 }
 
+// EnumInfo represents a GIEnumInfo (enums and flags)
+pub struct EnumInfo {
+	BaseInfo
+}
+
+// as_enum_info casts BaseInfo to EnumInfo
+pub fn (info BaseInfo) as_enum_info() EnumInfo {
+	return EnumInfo{
+		BaseInfo: info
+	}
+}
+
+// get_n_values returns the number of values in the enum
+pub fn (info EnumInfo) get_n_values() u32 {
+	return C.gi_enum_info_get_n_values(&C.GIEnumInfo(info.ptr))
+}
+
+// get_value returns value info at index
+pub fn (info EnumInfo) get_value(n u32) ?ValueInfo {
+	value_ptr := C.gi_enum_info_get_value(&C.GIEnumInfo(info.ptr), n)
+	if value_ptr == unsafe { nil } {
+		return none
+	}
+	return ValueInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(value_ptr)
+		}
+	}
+}
+
+// get_storage_type returns the storage type for the enum
+pub fn (info EnumInfo) get_storage_type() int {
+	return C.gi_enum_info_get_storage_type(&C.GIEnumInfo(info.ptr))
+}
+
+// ValueInfo represents a GIValueInfo (enum/flags value)
+pub struct ValueInfo {
+	BaseInfo
+}
+
+// get_value returns the integer value
+pub fn (info ValueInfo) get_value() i64 {
+	return C.gi_value_info_get_value(&C.GIValueInfo(info.ptr))
+}
+
 // ArgInfo represents a GIArgInfo
 pub struct ArgInfo {
 	BaseInfo

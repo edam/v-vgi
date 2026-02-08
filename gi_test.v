@@ -220,3 +220,54 @@ fn test_interface_methods() {
 		eprintln('This is okay if Gio is an older version')
 	}
 }
+
+fn test_enum_values() {
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	// find an enum
+	n_infos := repo.get_n_infos('Gio')
+	mut enum_info := ?EnumInfo(none)
+
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'enum' {
+			enum_info = info.as_enum_info()
+			break
+		}
+		info.free()
+	}
+
+	if enum_info_val := enum_info {
+		enum_name := enum_info_val.get_name()
+		println('Testing enum: ${enum_name}')
+		assert enum_name.len > 0
+
+		// test get_n_values
+		n_values := enum_info_val.get_n_values()
+		println('Number of values: ${n_values}')
+		assert n_values > 0
+
+		// test get_value
+		value := enum_info_val.get_value(0) or {
+			eprintln('Failed to get value 0')
+			assert false
+			return
+		}
+
+		value_name := value.get_name()
+		value_int := value.get_value()
+		println('First value: ${value_name} = ${value_int}')
+		assert value_name.len > 0
+
+		value.free()
+		enum_info_val.free()
+	} else {
+		eprintln('No enum found in Gio-2.0')
+		eprintln('This is okay if Gio is an older version')
+	}
+}

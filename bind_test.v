@@ -244,3 +244,64 @@ fn test_explicit_implements_declaration() {
 		eprintln('This is okay if Gio is an older version')
 	}
 }
+
+fn test_generate_enum() {
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	// find an enum to test
+	n_infos := repo.get_n_infos('Gio')
+	mut enum_info := ?EnumInfo(none)
+
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'enum' {
+			enum_info = info.as_enum_info()
+			break
+		}
+		info.free()
+	}
+
+	if enum_val := enum_info {
+		enum_name := enum_val.get_name()
+		println('Testing enum generation for: ${enum_name}')
+
+		// create temp directory for test
+		test_dir := os.join_path(os.temp_dir(), 'vgi_enum_test')
+		os.mkdir_all(test_dir) or {}
+		defer {
+			os.rmdir_all(test_dir) or {}
+		}
+
+		// generate enum
+		generate_enum_binding(enum_val, test_dir)
+
+		// verify file was created
+		file_path := os.join_path(test_dir, '${enum_name.to_lower()}.v')
+		assert os.exists(file_path)
+
+		// verify content
+		content := os.read_file(file_path) or {
+			eprintln('Failed to read generated file: ${err}')
+			assert false
+			return
+		}
+
+		// should contain enum declaration
+		assert content.contains('pub enum ${enum_name}')
+
+		// should contain at least one value
+		n_values := enum_val.get_n_values()
+		assert n_values > 0
+
+		println('Enum generation test passed!')
+		enum_val.free()
+	} else {
+		eprintln('No enum found in Gio-2.0')
+		eprintln('This is okay if Gio is an older version')
+	}
+}
