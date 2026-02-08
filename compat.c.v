@@ -29,6 +29,8 @@ fn C.gi_object_info_get_n_properties(info &C.GIObjectInfo) u32
 fn C.gi_object_info_get_property(info &C.GIObjectInfo, n u32) &C.GIPropertyInfo
 fn C.gi_object_info_get_n_methods(info &C.GIObjectInfo) u32
 fn C.gi_object_info_get_method(info &C.GIObjectInfo, n u32) &C.GIFunctionInfo
+fn C.gi_object_info_get_n_interfaces(info &C.GIObjectInfo) u32
+fn C.gi_object_info_get_interface(info &C.GIObjectInfo, n u32) &C.GIInterfaceInfo
 
 // Registered type info functions
 fn C.gi_registered_type_info_get_type_init_function_name(info &C.GIRegisteredTypeInfo) &char
@@ -53,6 +55,12 @@ fn C.gi_function_info_invoke(info &C.GIFunctionInfo, in_args &C.GIArgument, n_in
 fn C.gi_arg_info_get_direction(info &C.GIArgInfo) int
 fn C.gi_arg_info_get_type_info(info &C.GIArgInfo) &C.GITypeInfo
 fn C.gi_arg_info_may_be_null(info &C.GIArgInfo) bool
+
+// Interface info functions
+fn C.gi_interface_info_get_n_methods(info &C.GIInterfaceInfo) u32
+fn C.gi_interface_info_get_method(info &C.GIInterfaceInfo, n u32) &C.GIFunctionInfo
+fn C.gi_interface_info_get_n_prerequisites(info &C.GIInterfaceInfo) u32
+fn C.gi_interface_info_get_prerequisite(info &C.GIInterfaceInfo, n u32) &C.GIBaseInfo
 
 // Error handling
 fn C.g_error_free(error &C.GError)
@@ -114,6 +122,9 @@ struct C.GICallableInfo {}
 
 @[typedef]
 struct C.GIArgInfo {}
+
+@[typedef]
+struct C.GIInterfaceInfo {}
 
 @[typedef]
 struct C.GError {

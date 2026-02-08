@@ -48,15 +48,22 @@ pub fn generate_bindings(library string, version string) {
 	generate_readme(binding_dir, library, loaded_version, typelib_path)
 	generate_v_util(binding_dir)
 
-	// generate object bindings
+	// generate object and interface bindings
 	n_infos := repo.get_n_infos(library)
 
 	for i in 0 .. int(n_infos) {
 		info := repo.get_info(library, i) or { continue }
 
-		if info.get_type() == 'object' {
-			object_info := info.as_object_info()
-			generate_object_binding(object_info, binding_dir)
+		match info.get_type() {
+			'object' {
+				object_info := info.as_object_info()
+				generate_object_binding(object_info, binding_dir)
+			}
+			'interface' {
+				interface_info := info.as_interface_info()
+				generate_interface_binding(interface_info, binding_dir)
+			}
+			else {}
 		}
 
 		info.free()
@@ -285,6 +292,36 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 		}
 	}
 
+	// get interfaces and check for cross-namespace
+	n_interfaces := info.get_n_interfaces()
+	mut implements_list := []string{}
+
+	for i in 0 .. int(n_interfaces) {
+		iface := info.get_interface(u32(i)) or { continue }
+		iface_name := iface.get_name()
+		iface_namespace := iface.get_namespace()
+
+		if iface_namespace != current_namespace {
+			// cross-namespace interface - need import
+			repo := get_default_repository()
+			iface_version := repo.get_version(iface_namespace)
+			iface_module := get_binding_dir_name(iface_namespace, iface_version)
+			module_alias := iface_namespace.to_lower()
+
+			// add import if not already present
+			import_line := '\nimport edam.vgi.${iface_module} as ${module_alias}\n'
+			if !content.contains(import_line) {
+				content += import_line
+			}
+			implements_list << '${module_alias}.I${iface_name}'
+		} else {
+			// same namespace - direct reference
+			implements_list << 'I${iface_name}'
+		}
+
+		iface.free()
+	}
+
 	content += '\n'
 
 	// generate C function declarations
@@ -294,8 +331,12 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 	content += generate_c_method_declarations(info)
 
-	// struct with embedded parent
-	content += 'pub struct ${object_name} {\n'
+	// struct with embedded parent and implements clause
+	if implements_list.len > 0 {
+		content += 'pub struct ${object_name} implements ${implements_list.join(', ')} {\n'
+	} else {
+		content += 'pub struct ${object_name} {\n'
+	}
 	if parent_embed != '' {
 		content += '\t${parent_embed}\n'
 	} else {
@@ -310,10 +351,13 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	content += generate_constructor(info, object_name)
 
 	// property methods
-	content += generate_property_methods(info, object_name)
+	// content += generate_property_methods(info, object_name)
 
 	// object methods
 	content += generate_object_methods(info, object_name)
+
+	// interface implementations
+	content += generate_object_interface_implementations(info, object_name)
 
 	os.write_file(file_path, content) or {
 		eprintln('Warning: Failed to write ${file_path}')
@@ -321,9 +365,9 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 }
 
-// generate_properties_struct generates [@params] properties struct
+// generate_properties_struct generates @[params] properties struct
 fn generate_properties_struct(info ObjectInfo, object_name string, parent_name string, parent_embed string) string {
-	mut content := '[@params]\n'
+	mut content := '@[params]\n'
 	content += 'pub struct ${object_name}Properties {\n'
 
 	if parent_embed != '' {
@@ -606,6 +650,363 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		}
 
 		method.free()
+	}
+
+	return content
+}
+
+// generate_interface_binding generates V file for an interface
+fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
+	interface_name := info.get_name()
+	file_name := interface_name.to_lower() + '.v'
+	file_path := os.join_path(binding_dir, file_name)
+	module_name := os.file_name(binding_dir)
+
+	mut content := 'module ${module_name}\n\n'
+
+	// generate C method declarations
+	content += generate_c_interface_method_declarations(info)
+
+	// generate V interface (IFoo)
+	content += 'pub interface I${interface_name} {\n'
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		method_name := method.get_name()
+
+		// skip private methods
+		if method_name.starts_with('_') {
+			method.free()
+			continue
+		}
+
+		v_method_name := method_name.replace('-', '_')
+
+		// build parameter list
+		mut params := []string{}
+		n_args := method.get_n_args()
+		for j in 0 .. int(n_args) {
+			arg := method.get_arg(u32(j)) or { continue }
+			direction := arg.get_direction()
+			if direction == gi_direction_in {
+				arg_name := arg.get_name()
+				arg_type := arg.get_v_type()
+				params << '${arg_name} ${arg_type}'
+			}
+			arg.free()
+		}
+
+		// get return type
+		return_type_info := method.get_return_type()
+		return_v_type := return_type_info.to_v_type()
+		return_type_info.free()
+		skip_return := method.skip_return()
+
+		param_list := params.join(', ')
+
+		if skip_return || return_v_type == 'voidptr' {
+			content += '\t${v_method_name}(${param_list})\n'
+		} else {
+			content += '\t${v_method_name}(${param_list}) ${return_v_type}\n'
+		}
+
+		method.free()
+	}
+	content += '}\n\n'
+
+	// generate concrete struct (Foo) for C interop
+	content += 'pub struct ${interface_name} {\n'
+	content += '\tptr voidptr\n'
+	content += '}\n\n'
+
+	// generate methods on concrete struct
+	content += generate_interface_methods(info, interface_name)
+
+	os.write_file(file_path, content) or {
+		eprintln('Warning: Failed to write ${file_path}')
+		return
+	}
+}
+
+// generate_c_interface_method_declarations generates C function declarations for interface methods
+fn generate_c_interface_method_declarations(info InterfaceInfo) string {
+	mut content := ''
+	mut has_methods := false
+
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		method_name := method.get_name()
+
+		// skip private methods
+		if method_name.starts_with('_') {
+			method.free()
+			continue
+		}
+
+		symbol := method.get_symbol()
+		if symbol == '' {
+			method.free()
+			continue
+		}
+
+		has_methods = true
+
+		// build C parameter list
+		mut c_params := ['obj voidptr']
+		n_args := method.get_n_args()
+
+		for j in 0 .. int(n_args) {
+			arg := method.get_arg(u32(j)) or { continue }
+			direction := arg.get_direction()
+
+			if direction == gi_direction_in {
+				arg_type := arg.get_v_type()
+				// convert V type to C type
+				c_type := match arg_type {
+					'string' { '&char' }
+					'bool' { 'bool' }
+					'int', 'i8', 'i16', 'i32' { 'int' }
+					'u8', 'u16', 'u32' { 'u32' }
+					'i64' { 'i64' }
+					'u64' { 'u64' }
+					'f32' { 'f32' }
+					'f64' { 'f64' }
+					else { 'voidptr' }
+				}
+				c_params << 'arg${j} ${c_type}'
+			}
+
+			arg.free()
+		}
+
+		// get return type
+		return_type_info := method.get_return_type()
+		return_v_type := return_type_info.to_v_type()
+		return_type_info.free()
+
+		skip_return := method.skip_return()
+
+		c_return_type := if skip_return || return_v_type == 'voidptr' {
+			'voidptr'
+		} else {
+			match return_v_type {
+				'string' { '&char' }
+				'bool' { 'bool' }
+				'int', 'i8', 'i16' { 'int' }
+				'u8', 'u16', 'u32' { 'u32' }
+				'i64' { 'i64' }
+				'u64' { 'u64' }
+				'f32' { 'f32' }
+				'f64' { 'f64' }
+				else { 'voidptr' }
+			}
+		}
+
+		content += 'fn C.${symbol}(${c_params.join(', ')}) ${c_return_type}\n'
+
+		method.free()
+	}
+
+	if has_methods {
+		content += '\n'
+	}
+
+	return content
+}
+
+// generate_interface_methods generates methods on the concrete interface struct
+fn generate_interface_methods(info InterfaceInfo, interface_name string) string {
+	mut content := ''
+
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		method_name := method.get_name()
+
+		// skip private methods
+		if method_name.starts_with('_') {
+			method.free()
+			continue
+		}
+
+		symbol := method.get_symbol()
+		if symbol == '' {
+			method.free()
+			continue
+		}
+
+		// convert kebab-case to snake_case
+		v_method_name := method_name.replace('-', '_')
+
+		// build parameter list and call args
+		mut params := []string{}
+		mut call_args := []string{}
+		n_args := method.get_n_args()
+
+		for j in 0 .. int(n_args) {
+			arg := method.get_arg(u32(j)) or { continue }
+			arg_name := arg.get_name()
+			arg_type := arg.get_v_type()
+			direction := arg.get_direction()
+
+			// only handle 'in' parameters for now
+			if direction == gi_direction_in {
+				params << '${arg_name} ${arg_type}'
+				// convert V value to C value if needed
+				call_arg := if arg_type == 'string' { '${arg_name}.str' } else { arg_name }
+				call_args << call_arg
+			}
+
+			arg.free()
+		}
+
+		param_list := params.join(', ')
+
+		// get return type
+		return_type_info := method.get_return_type()
+		return_v_type := return_type_info.to_v_type()
+		return_type_info.free()
+
+		skip_return := method.skip_return()
+		needs_string_conv := return_v_type == 'string'
+
+		// generate method signature
+		if skip_return || return_v_type == 'voidptr' {
+			// void return
+			content += 'pub fn (obj &${interface_name}) ${v_method_name}(${param_list}) {\n'
+			content += '\tC.${symbol}(obj.ptr'
+			if call_args.len > 0 {
+				content += ', ${call_args.join(', ')}'
+			}
+			content += ')\n'
+			content += '}\n\n'
+		} else {
+			// typed return
+			content += 'pub fn (obj &${interface_name}) ${v_method_name}(${param_list}) ${return_v_type} {\n'
+			if needs_string_conv {
+				content += '\treturn unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
+			} else {
+				content += '\treturn C.${symbol}(obj.ptr'
+			}
+			if call_args.len > 0 {
+				content += ', ${call_args.join(', ')}'
+			}
+			if needs_string_conv {
+				content += ')) }\n'
+			} else {
+				content += ')\n'
+			}
+			content += '}\n\n'
+		}
+
+		method.free()
+	}
+
+	return content
+}
+
+// generate_object_interface_implementations generates interface method implementations on an object
+fn generate_object_interface_implementations(info ObjectInfo, object_name string) string {
+	mut content := ''
+
+	n_interfaces := info.get_n_interfaces()
+	if n_interfaces == 0 {
+		return content
+	}
+
+	for i in 0 .. int(n_interfaces) {
+		iface := info.get_interface(u32(i)) or { continue }
+		iface_name := iface.get_name()
+
+		content += '// ${iface_name} interface methods\n'
+
+		// generate each interface method on the object
+		n_methods := iface.get_n_methods()
+		for j in 0 .. int(n_methods) {
+			method := iface.get_method(u32(j)) or { continue }
+			method_name := method.get_name()
+
+			// skip private methods
+			if method_name.starts_with('_') {
+				method.free()
+				continue
+			}
+
+			symbol := method.get_symbol()
+			if symbol == '' {
+				method.free()
+				continue
+			}
+
+			// convert kebab-case to snake_case
+			v_method_name := method_name.replace('-', '_')
+
+			// build parameter list and call args
+			mut params := []string{}
+			mut call_args := []string{}
+			n_args := method.get_n_args()
+
+			for k in 0 .. int(n_args) {
+				arg := method.get_arg(u32(k)) or { continue }
+				arg_name := arg.get_name()
+				arg_type := arg.get_v_type()
+				direction := arg.get_direction()
+
+				// only handle 'in' parameters for now
+				if direction == gi_direction_in {
+					params << '${arg_name} ${arg_type}'
+					// convert V value to C value if needed
+					call_arg := if arg_type == 'string' { '${arg_name}.str' } else { arg_name }
+					call_args << call_arg
+				}
+
+				arg.free()
+			}
+
+			param_list := params.join(', ')
+
+			// get return type
+			return_type_info := method.get_return_type()
+			return_v_type := return_type_info.to_v_type()
+			return_type_info.free()
+
+			skip_return := method.skip_return()
+			needs_string_conv := return_v_type == 'string'
+
+			// generate method signature
+			if skip_return || return_v_type == 'voidptr' {
+				// void return
+				content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) {\n'
+				content += '\tC.${symbol}(obj.ptr'
+				if call_args.len > 0 {
+					content += ', ${call_args.join(', ')}'
+				}
+				content += ')\n'
+				content += '}\n\n'
+			} else {
+				// typed return
+				content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_v_type} {\n'
+				if needs_string_conv {
+					content += '\treturn unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
+				} else {
+					content += '\treturn C.${symbol}(obj.ptr'
+				}
+				if call_args.len > 0 {
+					content += ', ${call_args.join(', ')}'
+				}
+				if needs_string_conv {
+					content += ')) }\n'
+				} else {
+					content += ')\n'
+				}
+				content += '}\n\n'
+			}
+
+			method.free()
+		}
+
+		iface.free()
 	}
 
 	return content

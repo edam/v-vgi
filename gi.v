@@ -173,6 +173,24 @@ pub fn (info ObjectInfo) get_method(n u32) ?FunctionInfo {
 	}
 }
 
+// get_n_interfaces returns the number of interfaces implemented
+pub fn (info ObjectInfo) get_n_interfaces() u32 {
+	return C.gi_object_info_get_n_interfaces(&C.GIObjectInfo(info.ptr))
+}
+
+// get_interface returns interface info at index
+pub fn (info ObjectInfo) get_interface(n u32) ?InterfaceInfo {
+	iface_ptr := C.gi_object_info_get_interface(&C.GIObjectInfo(info.ptr), n)
+	if iface_ptr == unsafe { nil } {
+		return none
+	}
+	return InterfaceInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(iface_ptr)
+		}
+	}
+}
+
 // get_type_init returns the type initialization function name
 pub fn (info ObjectInfo) get_type_init() string {
 	type_init := C.gi_registered_type_info_get_type_init_function_name(&C.GIRegisteredTypeInfo(info.ptr))
@@ -307,6 +325,52 @@ pub fn (info FunctionInfo) get_symbol() string {
 		return ''
 	}
 	return unsafe { cstring_to_vstring(symbol) }
+}
+
+// InterfaceInfo represents a GIInterfaceInfo
+pub struct InterfaceInfo {
+	BaseInfo
+}
+
+// as_interface_info casts BaseInfo to InterfaceInfo
+pub fn (info BaseInfo) as_interface_info() InterfaceInfo {
+	return InterfaceInfo{
+		BaseInfo: info
+	}
+}
+
+// get_n_methods returns the number of methods
+pub fn (info InterfaceInfo) get_n_methods() u32 {
+	return C.gi_interface_info_get_n_methods(&C.GIInterfaceInfo(info.ptr))
+}
+
+// get_method returns method info at index
+pub fn (info InterfaceInfo) get_method(n u32) ?FunctionInfo {
+	method_ptr := C.gi_interface_info_get_method(&C.GIInterfaceInfo(info.ptr), n)
+	if method_ptr == unsafe { nil } {
+		return none
+	}
+	return FunctionInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(method_ptr)
+		}
+	}
+}
+
+// get_n_prerequisites returns the number of prerequisites (parent interfaces)
+pub fn (info InterfaceInfo) get_n_prerequisites() u32 {
+	return C.gi_interface_info_get_n_prerequisites(&C.GIInterfaceInfo(info.ptr))
+}
+
+// get_prerequisite returns prerequisite info at index
+pub fn (info InterfaceInfo) get_prerequisite(n u32) ?BaseInfo {
+	prereq_ptr := C.gi_interface_info_get_prerequisite(&C.GIInterfaceInfo(info.ptr), n)
+	if prereq_ptr == unsafe { nil } {
+		return none
+	}
+	return BaseInfo{
+		ptr: prereq_ptr
+	}
 }
 
 // ArgInfo represents a GIArgInfo

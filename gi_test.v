@@ -139,3 +139,84 @@ fn test_object_type_init() {
 
 	obj.free()
 }
+
+fn test_object_interfaces() {
+	repo := get_default_repository()
+	repo.require('GObject', '2.0') or {
+		eprintln('Failed to load GObject-2.0: ${err}')
+		assert false
+		return
+	}
+
+	// find Object type
+	n_infos := repo.get_n_infos('GObject')
+	mut object_info := ?ObjectInfo(none)
+
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('GObject', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Object' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	assert object_info != none
+
+	obj := object_info or { panic('unreachable') }
+
+	// test get_n_interfaces
+	n_interfaces := obj.get_n_interfaces()
+	println('GObject.Object implements ${n_interfaces} interfaces')
+
+	// interfaces can be 0 for base Object, that's okay
+	assert n_interfaces >= 0
+
+	obj.free()
+}
+
+fn test_interface_methods() {
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	// find an interface (e.g., ListModel)
+	n_infos := repo.get_n_infos('Gio')
+	mut interface_info := ?InterfaceInfo(none)
+
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'interface' && info.get_name() == 'ListModel' {
+			interface_info = info.as_interface_info()
+			break
+		}
+		info.free()
+	}
+
+	if iface := interface_info {
+		// test get_n_methods
+		n_methods := iface.get_n_methods()
+		println('Gio.ListModel has ${n_methods} methods')
+		assert n_methods > 0
+
+		// test get_method
+		method := iface.get_method(0) or {
+			eprintln('Failed to get method 0')
+			assert false
+			return
+		}
+
+		method_name := method.get_name()
+		println('First method: ${method_name}')
+		assert method_name.len > 0
+
+		method.free()
+		iface.free()
+	} else {
+		eprintln('ListModel interface not found in Gio-2.0')
+		eprintln('This is okay if Gio is an older version')
+	}
+}

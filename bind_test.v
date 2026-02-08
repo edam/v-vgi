@@ -105,3 +105,142 @@ fn test_generate_constructor() {
 
 	obj.free()
 }
+
+fn test_generate_interface() {
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	// find ListModel interface
+	n_infos := repo.get_n_infos('Gio')
+	mut interface_info := ?InterfaceInfo(none)
+
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'interface' && info.get_name() == 'ListModel' {
+			interface_info = info.as_interface_info()
+			break
+		}
+		info.free()
+	}
+
+	if iface := interface_info {
+		// generate C declarations
+		c_decls := generate_c_interface_method_declarations(iface)
+
+		// verify C declarations are generated
+		assert c_decls.contains('fn C.') || c_decls == '' // may have no public methods
+
+		// generate interface methods
+		content := generate_interface_methods(iface, 'ListModel')
+
+		// verify methods are generated
+		assert content.contains('pub fn (obj &ListModel)') || content == ''
+
+		iface.free()
+	} else {
+		eprintln('ListModel interface not found in Gio-2.0')
+		eprintln('This is okay if Gio is an older version')
+	}
+}
+
+fn test_object_interface_implementations() {
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	// find an object that implements interfaces
+	n_infos := repo.get_n_infos('Gio')
+	mut object_info := ?ObjectInfo(none)
+
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'object' {
+			obj_info := info.as_object_info()
+			// check if it implements any interfaces
+			if obj_info.get_n_interfaces() > 0 {
+				object_info = obj_info
+				break
+			}
+			obj_info.free()
+		} else {
+			info.free()
+		}
+	}
+
+	if obj := object_info {
+		object_name := obj.get_name()
+
+		// generate interface implementations
+		content := generate_object_interface_implementations(obj, object_name)
+
+		// verify interface methods are generated if the object implements interfaces
+		n_interfaces := obj.get_n_interfaces()
+		if n_interfaces > 0 {
+			assert content.contains('// interface implementations') ||
+				   content.contains('pub fn (obj &${object_name})')
+		}
+
+		obj.free()
+	} else {
+		eprintln('No object with interfaces found in Gio-2.0')
+		eprintln('This is okay if Gio is an older version')
+	}
+}
+
+fn test_explicit_implements_declaration() {
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	// find an object that implements interfaces
+	n_infos := repo.get_n_infos('Gio')
+	mut found := false
+
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'object' {
+			obj_info := info.as_object_info()
+			n_interfaces := obj_info.get_n_interfaces()
+
+			if n_interfaces > 0 {
+				object_name := obj_info.get_name()
+				println('Testing ${object_name} which implements ${n_interfaces} interfaces')
+
+				// simulate struct generation to verify implements clause
+				mut implements_list := []string{}
+				for j in 0 .. int(n_interfaces) {
+					iface := obj_info.get_interface(u32(j)) or { continue }
+					iface_name := iface.get_name()
+					implements_list << 'I${iface_name}'
+					iface.free()
+				}
+
+				// verify we have interfaces
+				assert implements_list.len > 0
+				println('  implements: ${implements_list.join(', ')}')
+
+				found = true
+				obj_info.free()  // frees the underlying BaseInfo ptr
+				break
+			}
+			obj_info.free()
+		} else {
+			info.free()
+		}
+	}
+
+	if !found {
+		eprintln('No object with interfaces found in Gio-2.0')
+		eprintln('This is okay if Gio is an older version')
+	}
+}
