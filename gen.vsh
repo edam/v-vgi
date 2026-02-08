@@ -13,6 +13,7 @@ const options = [
 	ggetopt.text(),
 	ggetopt.text('Options:'),
 	ggetopt.opt('info', `i`).help('display information about the library'),
+	ggetopt.opt('list', `l`).help('list available libraries and versions'),
 	ggetopt.opt_help(),
 	ggetopt.opt_version(),
 	ggetopt.text(),
@@ -25,6 +26,7 @@ const options = [
 struct Options {
 mut:
 	info bool
+	list bool
 }
 
 fn get_version() string {
@@ -43,6 +45,9 @@ fn (mut o Options) process_arg(arg string, val ?string) ! {
 		'info' {
 			o.info = true
 		}
+		'list' {
+			o.list = true
+		}
 		'help' {
 			ggetopt.print_help(options)
 			exit(0)
@@ -59,6 +64,13 @@ fn (mut o Options) process_arg(arg string, val ?string) ! {
 fn main() {
 	mut opts := Options{}
 	args := ggetopt.getopt_long_cli(options, opts.process_arg) or { ggetopt.die_hint(err) }
+
+	// handle --list option (doesn't require LIBRARY VERSION args)
+	if opts.list {
+		list_libraries()
+		exit(0)
+	}
+
 	if args.len > 2 {
 		ggetopt.die_hint('extra arguments on command line')
 	} else if args.len < 2 {
@@ -75,6 +87,96 @@ fn main() {
 
 	// generate bindings
 	vgi.generate_bindings(library, version)
+}
+
+fn get_typelib_search_paths() []string {
+	mut paths := []string{}
+
+	// standard system paths
+	standard_paths := [
+		'/usr/lib/girepository-1.0',
+		'/usr/local/lib/girepository-1.0',
+		'/opt/homebrew/lib/girepository-1.0',
+		'/usr/lib64/girepository-1.0',
+	]
+
+	for path in standard_paths {
+		if os.exists(path) {
+			paths << path
+		}
+	}
+
+	// add paths from GI_TYPELIB_PATH environment variable
+	env_path := os.getenv('GI_TYPELIB_PATH')
+	if env_path != '' {
+		for path in env_path.split(':') {
+			if path != '' && os.exists(path) {
+				paths << path
+			}
+		}
+	}
+
+	return paths
+}
+
+fn list_libraries() {
+	paths := get_typelib_search_paths()
+
+	if paths.len == 0 {
+		eprintln('No typelib directories found')
+		eprintln('Searched standard locations and GI_TYPELIB_PATH environment variable')
+		return
+	}
+
+	println('Typelib directories:')
+	for path in paths {
+		println('  ${path}')
+	}
+	println('')
+
+	// collect all typelibs
+	mut typelibs := map[string][]string{} // library name -> versions
+
+	for path in paths {
+		files := os.ls(path) or { continue }
+
+		for file in files {
+			if !file.ends_with('.typelib') {
+				continue
+			}
+
+			// parse LibraryName-Version.typelib
+			name_version := file.replace('.typelib', '')
+			parts := name_version.split('-')
+
+			if parts.len >= 2 {
+				library := parts[0..parts.len - 1].join('-')
+				version := parts[parts.len - 1]
+
+				if library !in typelibs {
+					typelibs[library] = []string{}
+				}
+				if version !in typelibs[library] {
+					typelibs[library] << version
+				}
+			}
+		}
+	}
+
+	if typelibs.len == 0 {
+		println('No typelib files found')
+		return
+	}
+
+	println('Libraries:')
+	mut libs := typelibs.keys()
+	libs.sort()
+
+	for library in libs {
+		mut versions := typelibs[library]
+		versions.sort()
+		println('  ${library}: ${versions.join(', ')}')
+	}
 }
 
 fn show_info(library string, version string) {
