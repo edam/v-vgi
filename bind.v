@@ -915,6 +915,17 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 		return content
 	}
 
+	// collect all method names from the object itself to detect collisions
+	mut object_method_names := map[string]bool{}
+	n_object_methods := info.get_n_methods()
+	for i in 0 .. int(n_object_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		method_name := method.get_name()
+		v_method_name := method_name.replace('-', '_')
+		object_method_names[v_method_name] = true
+		method.free()
+	}
+
 	for i in 0 .. int(n_interfaces) {
 		iface := info.get_interface(u32(i)) or { continue }
 		iface_name := iface.get_name()
@@ -941,6 +952,12 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 
 			// convert kebab-case to snake_case
 			v_method_name := method_name.replace('-', '_')
+
+			// skip if object already has a method with this name
+			if v_method_name in object_method_names {
+				method.free()
+				continue
+			}
 
 			// build parameter list and call args
 			mut params := []string{}
