@@ -355,7 +355,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	content += generate_constructor(info, object_name)
 
 	// property methods
-	// content += generate_property_methods(info, object_name)
+	content += generate_property_methods(info, object_name)
 
 	// object methods
 	content += generate_object_methods(info, object_name)
@@ -451,6 +451,16 @@ fn generate_constructor(info ObjectInfo, object_name string) string {
 fn generate_property_methods(info ObjectInfo, object_name string) string {
 	mut content := ''
 
+	// collect method names to avoid duplicates
+	mut method_names := map[string]bool{}
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		method_name := method.get_name().replace('-', '_')
+		method_names[method_name] = true
+		method.free()
+	}
+
 	n_props := info.get_n_properties()
 	for i in 0 .. int(n_props) {
 		prop := info.get_property(u32(i)) or { continue }
@@ -461,15 +471,15 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 		v_type := prop.get_v_type()
 		helper := prop.get_property_helper_name()
 
-		// getter if readable
-		if prop.is_readable() {
+		// getter if readable and no method exists
+		if prop.is_readable() && 'get_${v_prop_name}' !in method_names {
 			content += 'pub fn (obj &${object_name}) get_${v_prop_name}() ${v_type} {\n'
 			content += '\treturn get_${helper}_property(obj.ptr, \'${prop_name}\')\n'
 			content += '}\n\n'
 		}
 
-		// setter if writable
-		if prop.is_writable() {
+		// setter if writable and no method exists
+		if prop.is_writable() && 'set_${v_prop_name}' !in method_names {
 			content += 'pub fn (obj &${object_name}) set_${v_prop_name}(value ${v_type}) {\n'
 			content += '\tset_${helper}_property(obj.ptr, \'${prop_name}\', value)\n'
 			content += '}\n\n'
@@ -625,7 +635,7 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		needs_string_conv := return_v_type == 'string'
 
 		// generate method signature
-		if skip_return || return_v_type == 'voidptr' {
+		if skip_return {
 			// void return
 			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) {\n'
 			content += '\tC.${symbol}(obj.ptr'
