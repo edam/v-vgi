@@ -263,6 +263,70 @@ fn set_pointer_property(obj voidptr, prop_name string, val voidptr) {
 	}
 }
 
+// check_interface_signature_mismatches checks if object methods match interface signatures
+fn check_interface_signature_mismatches(obj_info ObjectInfo, iface_info InterfaceInfo, object_name string) []string {
+	mut mismatches := []string{}
+
+	// build map of object methods: name -> (return_type, skip_return)
+	mut obj_methods := map[string]struct {
+		return_type string
+		skip_return bool
+	}{}
+
+	n_obj_methods := obj_info.get_n_methods()
+	for i in 0 .. int(n_obj_methods) {
+		method := obj_info.get_method(u32(i)) or { continue }
+		method_name := method.get_name().replace('-', '_')
+
+		ret_type_info := method.get_return_type()
+		obj_methods[method_name] = struct {
+			return_type: ret_type_info.to_v_type()
+			skip_return: method.skip_return()
+		}
+		ret_type_info.free()
+		method.free()
+	}
+
+	// check each interface method
+	iface_name := iface_info.get_name()
+	n_iface_methods := iface_info.get_n_methods()
+
+	for i in 0 .. int(n_iface_methods) {
+		method := iface_info.get_method(u32(i)) or { continue }
+		method_name := method.get_name().replace('-', '_')
+
+		// skip private methods
+		if method_name.starts_with('_') {
+			method.free()
+			continue
+		}
+
+		// get interface method signature
+		ret_type_info := method.get_return_type()
+		iface_ret_type := ret_type_info.to_v_type()
+		iface_skip_return := method.skip_return()
+		ret_type_info.free()
+
+		// check if object has this method
+		if method_name in obj_methods {
+			obj_method := obj_methods[method_name]
+
+			// compare return types
+			obj_ret := if obj_method.skip_return { 'void' } else { obj_method.return_type }
+			iface_ret := if iface_skip_return { 'void' } else { iface_ret_type }
+
+			if obj_ret != iface_ret {
+				mismatch := 'Method ${method_name}: interface expects return type ${iface_ret}, object has ${obj_ret}'
+				mismatches << mismatch
+			}
+		}
+
+		method.free()
+	}
+
+	return mismatches
+}
+
 // generate_object_binding generates V file for an object
 fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	object_name := info.get_name()
@@ -299,11 +363,34 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	// get interfaces and check for cross-namespace
 	n_interfaces := info.get_n_interfaces()
 	mut implements_list := []string{}
+	mut interface_comments := []string{}
 
 	for i in 0 .. int(n_interfaces) {
 		iface := info.get_interface(u32(i)) or { continue }
 		iface_name := iface.get_name()
 		iface_namespace := iface.get_namespace()
+
+		// check for signature mismatches
+		mismatches := check_interface_signature_mismatches(info, iface, object_name)
+
+		if mismatches.len > 0 {
+			// emit warning to stderr
+			eprintln('Warning: ${object_name} claims to implement I${iface_name} but has signature mismatches:')
+			for mismatch in mismatches {
+				eprintln('  ${mismatch}')
+			}
+
+			// add comment to generated code
+			mut comment := '// Note: ${object_name} claims to implement I${iface_name} but "implements" clause\n'
+			comment += '// was omitted due to signature mismatches:\n'
+			for mismatch in mismatches {
+				comment += '// - ${mismatch}\n'
+			}
+			interface_comments << comment
+
+			iface.free()
+			continue
+		}
 
 		if iface_namespace != current_namespace {
 			// cross-namespace interface - need import
@@ -334,6 +421,11 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 		content += 'fn C.${type_init}() u64\n'
 	}
 	content += generate_c_method_declarations(info)
+
+	// add interface mismatch comments if any
+	for comment in interface_comments {
+		content += comment
+	}
 
 	// struct with embedded parent and implements clause
 	if implements_list.len > 0 {
@@ -718,7 +810,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 
 		param_list := params.join(', ')
 
-		if skip_return || return_v_type == 'voidptr' {
+		if skip_return {
 			content += '\t${v_method_name}(${param_list})\n'
 		} else {
 			content += '\t${v_method_name}(${param_list}) ${return_v_type}\n'
@@ -886,7 +978,7 @@ fn generate_interface_methods(info InterfaceInfo, interface_name string) string 
 		needs_string_conv := return_v_type == 'string'
 
 		// generate method signature
-		if skip_return || return_v_type == 'voidptr' {
+		if skip_return {
 			// void return
 			content += 'pub fn (obj &${interface_name}) ${v_method_name}(${param_list}) {\n'
 			content += '\tC.${symbol}(obj.ptr'
@@ -1006,7 +1098,7 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 			needs_string_conv := return_v_type == 'string'
 
 			// generate method signature
-			if skip_return || return_v_type == 'voidptr' {
+			if skip_return {
 				// void return
 				content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) {\n'
 				content += '\tC.${symbol}(obj.ptr'
