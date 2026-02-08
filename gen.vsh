@@ -73,12 +73,28 @@ fn main() {
 
 	if args.len > 2 {
 		ggetopt.die_hint('extra arguments on command line')
-	} else if args.len < 2 {
+	} else if args.len < 1 {
 		ggetopt.die_hint('too few arguments on command line')
 	}
 
-	library := args[0]
-	version := args[1]
+	// parse library and version from arguments
+	mut library := ''
+	mut version := ''
+
+	if args.len == 2 {
+		// two arguments: library version
+		library = args[0]
+		version = args[1]
+	} else if args.len == 1 {
+		// one argument: library-version format
+		// split on last hyphen to handle library names with hyphens
+		arg := args[0]
+		last_hyphen := arg.last_index('-') or {
+			ggetopt.die_hint('argument must be in LIBRARY-VERSION format (e.g., Gtk-4.0) or provide two arguments')
+		}
+		library = arg[..last_hyphen]
+		version = arg[last_hyphen + 1..]
+	}
 
 	if opts.info {
 		show_info(library, version)
