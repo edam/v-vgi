@@ -2,6 +2,28 @@ module gen
 
 import os
 
+const test_code = "
+module main
+
+import edam.vgi.gtk_4_0 as gtk
+
+@[heap]
+struct MyApp {
+	gtk.Application
+}
+
+fn MyApp.new() &MyApp {
+	return &MyApp{
+		Application: *gtk.Application.new()
+	}
+}
+
+fn main() {
+	app := MyApp.new()
+	println('Version \${app.get_version()}')
+}
+"
+
 fn test_generated_bindings_integration() {
 	// integration test: generate bindings and verify they compile
 	// note: library names and versions are hard-coded but this is acceptable
@@ -39,22 +61,7 @@ fn test_generated_bindings_integration() {
 	}
 
 	// create test V file
-	test_code := "module main
-
-import edam.vgi.gtk_4_0 as gtk
-
-struct MyApp {
-	gtk.Application
-}
-
-fn main() {
-	app := MyApp{}
-	// note: run() requires arguments in real usage, but we're just testing compilation
-	println('MyApp created successfully')
-}
-"
-
-	test_file := os.join_path(test_dir, 'vgi_int_test.v')
+	test_file := os.join_path(test_dir, 'vgi_int.v')
 	os.write_file(test_file, test_code) or {
 		eprintln('Failed to write test file: ${err}')
 		assert false
