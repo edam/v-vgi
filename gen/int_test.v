@@ -26,6 +26,18 @@ fn test_generated_bindings_integration() {
 
 	println('Creating test application...')
 
+	// create temporary directory in /tmp
+	test_dir := os.join_path('/tmp', 'vgi_int_test_${os.getpid()}')
+	os.mkdir_all(test_dir) or {
+		eprintln('Failed to create test directory: ${err}')
+		assert false
+		return
+	}
+
+	defer {
+		os.rmdir_all(test_dir) or {}
+	}
+
 	// create test V file
 	test_code := "module main
 
@@ -42,21 +54,17 @@ fn main() {
 }
 "
 
-	test_file := os.join_path(os.temp_dir(), 'vgi_int_test.v')
+	test_file := os.join_path(test_dir, 'vgi_int_test.v')
 	os.write_file(test_file, test_code) or {
 		eprintln('Failed to write test file: ${err}')
 		assert false
 		return
 	}
 
-	defer {
-		os.rm(test_file) or {}
-	}
-
 	println('Compiling test application...')
 
 	// try to compile the test file
-	result := os.execute('v -check ${test_file}')
+	result := os.execute('v run ${test_file}')
 
 	if result.exit_code != 0 {
 		eprintln('Compilation failed:')
