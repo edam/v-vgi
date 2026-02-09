@@ -1,9 +1,9 @@
-module vgi
+module gen
 
 import os
 
 // get_binding_dir_name converts library name and version to directory name
-// E.g., "Gtk-4.0" becomes "gtk_4_0"
+// e.g., "Gtk-4.0" becomes "gtk_4_0"
 pub fn get_binding_dir_name(library string, version string) string {
 	lib_lower := library.to_lower().replace('-', '_')
 	ver_lower := version.replace('.', '_').replace('-', '_')
@@ -92,6 +92,7 @@ Typelib: ${typelib_path}
 	}
 }
 
+// generate_compat_c generates C interop declarations for the binding module
 // generate_v_util generates helper functions for property access
 fn generate_v_util(binding_dir string) {
 	util_path := os.join_path(binding_dir, 'v_util.v')
@@ -99,14 +100,12 @@ fn generate_v_util(binding_dir string) {
 
 	mut content := 'module ${module_name}
 
-import edam.vgi
-
 // helper functions for property access
 
 fn get_bool_property(obj voidptr, prop_name string) bool {
 	mut value := C.GValue{}
-	C.g_value_init(&value, C.g_type_boolean)
-	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	C.g_value_init(&value, C.g_type_boolean())
+	unsafe { C.g_object_get_property(&C.GObject(obj), prop_name.str, &value) }
 	result := C.g_value_get_boolean(&value)
 	C.g_value_unset(&value)
 	return result
@@ -114,16 +113,16 @@ fn get_bool_property(obj voidptr, prop_name string) bool {
 
 fn set_bool_property(obj voidptr, prop_name string, val bool) {
 	mut gvalue := C.GValue{}
-	C.g_value_init(&gvalue, C.g_type_boolean)
+	C.g_value_init(&gvalue, C.g_type_boolean())
 	C.g_value_set_boolean(&gvalue, val)
-	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	unsafe { C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue) }
 	C.g_value_unset(&gvalue)
 }
 
 fn get_int_property(obj voidptr, prop_name string) int {
 	mut value := C.GValue{}
-	C.g_value_init(&value, C.g_type_int)
-	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	C.g_value_init(&value, C.g_type_int())
+	unsafe { C.g_object_get_property(&C.GObject(obj), prop_name.str, &value) }
 	result := C.g_value_get_int(&value)
 	C.g_value_unset(&value)
 	return result
@@ -131,16 +130,16 @@ fn get_int_property(obj voidptr, prop_name string) int {
 
 fn set_int_property(obj voidptr, prop_name string, val int) {
 	mut gvalue := C.GValue{}
-	C.g_value_init(&gvalue, C.g_type_int)
+	C.g_value_init(&gvalue, C.g_type_int())
 	C.g_value_set_int(&gvalue, val)
-	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	unsafe { C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue) }
 	C.g_value_unset(&gvalue)
 }
 
 fn get_uint_property(obj voidptr, prop_name string) u32 {
 	mut value := C.GValue{}
-	C.g_value_init(&value, C.g_type_uint)
-	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	C.g_value_init(&value, C.g_type_uint())
+	unsafe { C.g_object_get_property(&C.GObject(obj), prop_name.str, &value) }
 	result := C.g_value_get_uint(&value)
 	C.g_value_unset(&value)
 	return result
@@ -148,16 +147,16 @@ fn get_uint_property(obj voidptr, prop_name string) u32 {
 
 fn set_uint_property(obj voidptr, prop_name string, val u32) {
 	mut gvalue := C.GValue{}
-	C.g_value_init(&gvalue, C.g_type_uint)
+	C.g_value_init(&gvalue, C.g_type_uint())
 	C.g_value_set_uint(&gvalue, val)
-	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	unsafe { C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue) }
 	C.g_value_unset(&gvalue)
 }
 
 fn get_int64_property(obj voidptr, prop_name string) i64 {
 	mut value := C.GValue{}
-	C.g_value_init(&value, C.g_type_int64)
-	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	C.g_value_init(&value, C.g_type_int64())
+	unsafe { C.g_object_get_property(&C.GObject(obj), prop_name.str, &value) }
 	result := C.g_value_get_int64(&value)
 	C.g_value_unset(&value)
 	return result
@@ -165,16 +164,16 @@ fn get_int64_property(obj voidptr, prop_name string) i64 {
 
 fn set_int64_property(obj voidptr, prop_name string, val i64) {
 	mut gvalue := C.GValue{}
-	C.g_value_init(&gvalue, C.g_type_int64)
+	C.g_value_init(&gvalue, C.g_type_int64())
 	C.g_value_set_int64(&gvalue, val)
-	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	unsafe { C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue) }
 	C.g_value_unset(&gvalue)
 }
 
 fn get_uint64_property(obj voidptr, prop_name string) u64 {
 	mut value := C.GValue{}
-	C.g_value_init(&value, C.g_type_uint64)
-	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	C.g_value_init(&value, C.g_type_uint64())
+	unsafe { C.g_object_get_property(&C.GObject(obj), prop_name.str, &value) }
 	result := C.g_value_get_uint64(&value)
 	C.g_value_unset(&value)
 	return result
@@ -182,16 +181,16 @@ fn get_uint64_property(obj voidptr, prop_name string) u64 {
 
 fn set_uint64_property(obj voidptr, prop_name string, val u64) {
 	mut gvalue := C.GValue{}
-	C.g_value_init(&gvalue, C.g_type_uint64)
+	C.g_value_init(&gvalue, C.g_type_uint64())
 	C.g_value_set_uint64(&gvalue, val)
-	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	unsafe { C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue) }
 	C.g_value_unset(&gvalue)
 }
 
 fn get_float_property(obj voidptr, prop_name string) f32 {
 	mut value := C.GValue{}
-	C.g_value_init(&value, C.g_type_float)
-	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	C.g_value_init(&value, C.g_type_float())
+	unsafe { C.g_object_get_property(&C.GObject(obj), prop_name.str, &value) }
 	result := C.g_value_get_float(&value)
 	C.g_value_unset(&value)
 	return result
@@ -199,16 +198,16 @@ fn get_float_property(obj voidptr, prop_name string) f32 {
 
 fn set_float_property(obj voidptr, prop_name string, val f32) {
 	mut gvalue := C.GValue{}
-	C.g_value_init(&gvalue, C.g_type_float)
+	C.g_value_init(&gvalue, C.g_type_float())
 	C.g_value_set_float(&gvalue, val)
-	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	unsafe { C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue) }
 	C.g_value_unset(&gvalue)
 }
 
 fn get_double_property(obj voidptr, prop_name string) f64 {
 	mut value := C.GValue{}
-	C.g_value_init(&value, C.g_type_double)
-	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	C.g_value_init(&value, C.g_type_double())
+	unsafe { C.g_object_get_property(&C.GObject(obj), prop_name.str, &value) }
 	result := C.g_value_get_double(&value)
 	C.g_value_unset(&value)
 	return result
@@ -216,16 +215,16 @@ fn get_double_property(obj voidptr, prop_name string) f64 {
 
 fn set_double_property(obj voidptr, prop_name string, val f64) {
 	mut gvalue := C.GValue{}
-	C.g_value_init(&gvalue, C.g_type_double)
+	C.g_value_init(&gvalue, C.g_type_double())
 	C.g_value_set_double(&gvalue, val)
-	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	unsafe { C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue) }
 	C.g_value_unset(&gvalue)
 }
 
 fn get_string_property(obj voidptr, prop_name string) string {
 	mut value := C.GValue{}
-	C.g_value_init(&value, C.g_type_string)
-	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	C.g_value_init(&value, C.g_type_string())
+	unsafe { C.g_object_get_property(&C.GObject(obj), prop_name.str, &value) }
 	result := unsafe { cstring_to_vstring(C.g_value_get_string(&value)) }
 	C.g_value_unset(&value)
 	return result
@@ -233,16 +232,16 @@ fn get_string_property(obj voidptr, prop_name string) string {
 
 fn set_string_property(obj voidptr, prop_name string, val string) {
 	mut gvalue := C.GValue{}
-	C.g_value_init(&gvalue, C.g_type_string)
+	C.g_value_init(&gvalue, C.g_type_string())
 	C.g_value_set_string(&gvalue, val.str)
-	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	unsafe { C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue) }
 	C.g_value_unset(&gvalue)
 }
 
 fn get_pointer_property(obj voidptr, prop_name string) voidptr {
 	mut value := C.GValue{}
-	C.g_value_init(&value, C.g_type_pointer)
-	C.g_object_get_property(&C.GObject(obj), prop_name.str, &value)
+	C.g_value_init(&value, C.g_type_pointer())
+	unsafe { C.g_object_get_property(&C.GObject(obj), prop_name.str, &value) }
 	result := C.g_value_get_pointer(&value)
 	C.g_value_unset(&value)
 	return result
@@ -250,9 +249,9 @@ fn get_pointer_property(obj voidptr, prop_name string) voidptr {
 
 fn set_pointer_property(obj voidptr, prop_name string, val voidptr) {
 	mut gvalue := C.GValue{}
-	C.g_value_init(&gvalue, C.g_type_pointer)
+	C.g_value_init(&gvalue, C.g_type_pointer())
 	C.g_value_set_pointer(&gvalue, val)
-	C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue)
+	unsafe { C.g_object_set_property(&C.GObject(obj), prop_name.str, &gvalue) }
 	C.g_value_unset(&gvalue)
 }
 '
@@ -288,7 +287,6 @@ fn check_interface_signature_mismatches(obj_info ObjectInfo, iface_info Interfac
 	}
 
 	// check each interface method
-	iface_name := iface_info.get_name()
 	n_iface_methods := iface_info.get_n_methods()
 
 	for i in 0 .. int(n_iface_methods) {

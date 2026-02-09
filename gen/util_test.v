@@ -1,4 +1,4 @@
-module vgi
+module gen
 
 import os
 
@@ -23,10 +23,10 @@ fn test_get_vmod_path_empty_string() {
 }
 
 fn test_get_vmod_path_subdirectory() {
-	// Test with a file we know exists
-	path := get_vmod_path('util.v')
-	assert os.exists(path), 'util.v should exist at ${path}'
-	assert os.is_file(path), 'util.v should be a file'
+	// test with a file we know exists in gen/ subdirectory
+	path := get_vmod_path('gen/util.v')
+	assert os.exists(path), 'gen/util.v should exist at ${path}'
+	assert os.is_file(path), 'gen/util.v should be a file'
 }
 
 fn test_get_vmod_path_contains_vgi() {
@@ -36,8 +36,8 @@ fn test_get_vmod_path_contains_vgi() {
 }
 
 fn test_get_vmod_path_multiple_files() {
-	// Test that we can locate multiple known files
-	files := ['v.mod', 'util.v', 'gi.v', 'compat.c.v']
+	// test that we can locate multiple known files
+	files := ['v.mod', 'gen/util.v', 'gen/gi.v', 'gen/compat.c.v']
 	for file in files {
 		path := get_vmod_path(file)
 		assert os.exists(path), '${file} should exist at ${path}'

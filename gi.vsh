@@ -3,7 +3,7 @@
 import os
 import regex
 import edam.ggetopt
-import edam.vgi
+import edam.vgi.gen
 
 const description = 'GObject introspection bindings (re)generator for V'
 const options = [
@@ -17,9 +17,9 @@ const options = [
 	ggetopt.opt_help(),
 	ggetopt.opt_version(),
 	ggetopt.text(),
-	ggetopt.text('E.g., to generate (or regenerate) gtk 4.x series bindings:'),
-	ggetopt.text('  ~/.vmodules/edam/vgi/gen.vsh gtk 4.0'),
-	ggetopt.text('Then you can go "import edam.vgi.gtk" in your V apps.'),
+	ggetopt.text('E.g., to generate (or regenerate) Gtk 4.x series bindings:'),
+	ggetopt.text('  ~/.vmodules/edam/vgi/gi.vsh Gtk 4.0'),
+	ggetopt.text('Then you can go "import edam.vgi.gtk_4_0 as gtk" in your V apps.'),
 ]
 
 @[heap]
@@ -31,7 +31,7 @@ mut:
 
 fn get_version() string {
 	mut re := regex.regex_opt(r".*version: *'([0-9.]+)'.*") or { return '' }
-	vmod := os.read_lines(vgi.get_vmod_path('v.mod')) or { return 'unknown' }
+	vmod := os.read_lines(gen.get_vmod_path('v.mod')) or { return 'unknown' }
 	for line in vmod {
 		if re.matches_string(line) {
 			return re.get_group_by_id(line, 0)
@@ -102,7 +102,7 @@ fn main() {
 	}
 
 	// generate bindings
-	vgi.generate_bindings(library, version)
+	gen.generate_bindings(library, version)
 }
 
 fn get_typelib_search_paths() []string {
@@ -196,7 +196,7 @@ fn list_libraries() {
 }
 
 fn show_info(library string, version string) {
-	repo := vgi.get_default_repository()
+	repo := gen.get_default_repository()
 
 	// load library
 	repo.require(library, version) or {

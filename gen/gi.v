@@ -1,4 +1,4 @@
-module vgi
+module gen
 
 // Repository represents a GIRepository instance
 pub struct Repository {

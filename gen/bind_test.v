@@ -1,4 +1,4 @@
-module vgi
+module gen
 
 import os
 
@@ -183,8 +183,8 @@ fn test_object_interface_implementations() {
 		// verify interface methods are generated if the object implements interfaces
 		n_interfaces := obj.get_n_interfaces()
 		if n_interfaces > 0 {
-			assert content.contains('// interface implementations') ||
-				   content.contains('pub fn (obj &${object_name})')
+			assert content.contains('// interface implementations')
+				|| content.contains('pub fn (obj &${object_name})')
 		}
 
 		obj.free()
@@ -230,7 +230,7 @@ fn test_explicit_implements_declaration() {
 				println('  implements: ${implements_list.join(', ')}')
 
 				found = true
-				obj_info.free()  // frees the underlying BaseInfo ptr
+				obj_info.free() // frees the underlying BaseInfo ptr
 				break
 			}
 			obj_info.free()

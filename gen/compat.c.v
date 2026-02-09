@@ -1,4 +1,4 @@
-module vgi
+module gen
 
 #pkgconfig --libs --cflags girepository-2.0
 
@@ -157,19 +157,19 @@ struct C.GValue {
 // GIArgument union for function invocation
 @[typedef]
 union C.GIArgument {
-	v_boolean  bool
-	v_int8     i8
-	v_uint8    u8
-	v_int16    i16
-	v_uint16   u16
-	v_int32    int
-	v_uint32   u32
-	v_int64    i64
-	v_uint64   u64
-	v_float    f32
-	v_double   f64
-	v_pointer  voidptr
-	v_string   &char
+	v_boolean bool
+	v_int8    i8
+	v_uint8   u8
+	v_int16   i16
+	v_uint16  u16
+	v_int32   int
+	v_uint32  u32
+	v_int64   i64
+	v_uint64  u64
+	v_float   f32
+	v_double  f64
+	v_pointer voidptr
+	v_string  &char
 }
 
 // Property flags

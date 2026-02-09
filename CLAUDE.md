@@ -12,20 +12,21 @@ The module generates V binding code dynamically based on GObject introspection d
 
 ### Core Components
 
-- **util.v**: Utility functions for the module, including `get_vmod_path()` which resolves paths relative to the module directory
-- **compat.c.v**: C interop layer defining libgirepository-2.0 C function bindings and types. Uses `#pkgconfig` to link with girepository.
-- **gi.v**: V wrapper API for GObject introspection, providing `Repository` struct and methods to query typelib metadata
-- **bind.v**: Binding generation logic that creates V structs, properties, and methods from GObject introspection metadata
-- **gen.vsh**: V script that regenerates bindings for a specified GObject library and version. This is the main code generation tool.
+- **gi.vsh**: V script that regenerates bindings for a specified GObject library and version. This is the main code generation tool.
+- **gen/** subdirectory: Contains the code generation logic
+  - **gen/util.v**: Utility functions for the module, including `get_vmod_path()` which resolves paths relative to the module directory
+  - **gen/compat.c.v**: C interop layer defining libgirepository-2.0 C function bindings and types. Uses `#pkgconfig` to link with girepository.
+  - **gen/gi.v**: V wrapper API for GObject introspection, providing `Repository` struct and methods to query typelib metadata
+  - **gen/bind.v**: Binding generation logic that creates V structs, properties, and methods from GObject introspection metadata
 - **v.mod**: Module definition declaring the `vgi` module with dependency on `edam.ggetopt`
 
 ### Key Architectural Pattern
 
 This module uses a **code generation pattern** where:
-1. Users run `gen.vsh` with a library name and version (e.g., `gtk 4.0`)
+1. Users run `gi.vsh` with a library name and version (e.g., `gtk 4.0`)
 2. The script queries GObject introspection (libgirepository) for API metadata
 3. Static V bindings are generated and placed in the module directory
-4. Users import the generated bindings (e.g., `import edam.vgi.gtk`)
+4. Users import the generated bindings (e.g., `import edam.vgi.gtk_4_0 as gtk`)
 
 The generated bindings are designed to be regenerated whenever library versions change or APIs are updated.
 
@@ -46,21 +47,21 @@ Add this to your shell profile or prefix all commands with it. **All v commands 
 ### Display Library Information
 Show information about a GObject library (typelib path, version, metadata count):
 ```bash
-v run gen.vsh --info LIBRARY VERSION
-v run gen.vsh -i gtk 4.0
+v run gi.vsh --info LIBRARY VERSION
+v run gi.vsh -i gtk 4.0
 ```
 
 ### Generate Bindings
 Generate or regenerate bindings for a GObject library:
 ```bash
-v run gen.vsh LIBRARY VERSION
+v run gi.vsh LIBRARY VERSION
 # Example:
-v run gen.vsh gtk 4.0
+v run gi.vsh gtk 4.0
 ```
 
 Or run the script directly (if executable):
 ```bash
-./gen.vsh gtk 4.0
+./gi.vsh gtk 4.0
 ```
 
 Options:
@@ -76,8 +77,8 @@ v test .
 
 Run specific test file:
 ```bash
-v test gi_test.v
-v test util_test.v
+v test gen/gi_test.v
+v test gen/util_test.v
 ```
 
 Run specific test function:
@@ -93,8 +94,8 @@ v -stats test .
 ### Building/Compiling
 Since this is a V module, it doesn't require building itself. However, to check syntax:
 ```bash
-v util.v
-v gen.vsh
+v gen/util.v
+v gi.vsh
 ```
 
 ## Development Notes
@@ -108,21 +109,21 @@ v gen.vsh
 ### GObject Introspection Integration
 
 The module wraps libgirepository-2.0 via C interop:
-- **compat.c.v** declares C functions (e.g., `gi_repository_dup_default`, `gi_repository_require`) and opaque types
-- **gi.v** provides V-friendly wrappers with error handling and string conversion
+- **gen/compat.c.v** declares C functions (e.g., `gi_repository_dup_default`, `gi_repository_require`) and opaque types
+- **gen/gi.v** provides V-friendly wrappers with error handling and string conversion
 - Key APIs: `get_default_repository()`, `Repository.require()`, `Repository.get_n_infos()`, `Repository.get_typelib_path()`
 
 ### Path Resolution
 
-The module uses `get_vmod_path()` utility (in util.v) to resolve paths relative to the module's installation directory. This is used in gen.vsh to locate the v.mod file and other resources.
+The module uses `get_vmod_path()` utility (in gen/util.v) to resolve paths relative to the module's installation directory. This is used in gi.vsh to locate the v.mod file and other resources.
 
 ### Command-Line Parsing
 
-gen.vsh uses the `edam.ggetopt` module for option parsing with a declarative options array (gen.vsh:8-21). The `process_arg()` method (gen.vsh:45-61) handles option callbacks.
+gi.vsh uses the `edam.ggetopt` module for option parsing with a declarative options array. The `process_arg()` method handles option callbacks.
 
 ### Code Generation Context
 
-When working on binding generation (bind.v), remember:
+When working on binding generation (gen/bind.v), remember:
 1. Query libgirepository for type information
 2. Map GObject types to V types
 3. Generate valid V syntax for structs, functions, and method bindings
@@ -166,8 +167,8 @@ Generated bindings support cross-namespace inheritance by importing dependency b
 - Run tests with: `v test .`
 - Aim for clear, descriptive test names that explain what is being tested
 - **Always run the full test suite after making changes**: `v test .`
-- **Do not run gen.vsh multiple times during testing** - it creates directories and generates many files. Use unit tests instead of repeatedly invoking gen.vsh
-- Focus tests on library code (`bind.v`, `gi.v`, `util.v`) rather than CLI scripts like `gen.vsh` which are primarily glue code
+- **Do not run gi.vsh multiple times during testing** - it creates directories and generates many files. Use unit tests instead of repeatedly invoking gi.vsh
+- Focus tests on library code (`gen/bind.v`, `gen/gi.v`, `gen/util.v`) rather than CLI scripts like `gi.vsh` which are primarily glue code
 
 ### Documentation
 - **Keep CLAUDE.md up to date** when making significant changes

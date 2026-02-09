@@ -22,7 +22,7 @@ How to use Gtk 4.x on a Mac...
 ``` Shell
 brew instll gtk4
 v install edam.vgi
-~/.vmodules/edam/vgi/gen.vsh Gtk 4.0
+~/.vmodules/edam/vgi/gi.vsh Gtk 4.0
 ```
 
 Then, in V...
@@ -55,7 +55,7 @@ brew install gtk4
 v install edam.vgi
 ```
 
-Finally, run the `gen` script to generate bindings for V.
+Finally, run the `gi.vsh` script to generate bindings for V.
 
 ## Generate bindings
 
@@ -71,7 +71,7 @@ export PKG_CONFIG_PATH="/usr/local/Homebrew/Library/Homebrew/os/mac/pkgconfig/15
 ### Then
 
 ``` Shell
-~/.vmodules/edam/vgi/gen.vsh
+~/.vmodules/edam/vgi/gi.vsh
 ```
 
 # Documentation
@@ -80,7 +80,7 @@ export PKG_CONFIG_PATH="/usr/local/Homebrew/Library/Homebrew/os/mac/pkgconfig/15
 
 Although GObject Introspection (gi) can be run dynamically (such as PyGi), this
 cannot be done for V, as we must run the code to generate before compiling the
-programme that uses them.  `gen.vsh` does exactly this.
+programme that uses them.  `gi.vsh` does exactly this.
 
 Generated bindings are placed in subdirectories in `vgi`, named after the
 library and version (e.g., `Gtk-4.0` becomes `gtk_4_0`) for compatibility and so

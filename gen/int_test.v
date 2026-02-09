@@ -1,4 +1,4 @@
-module vgi
+module gen
 
 import os
 

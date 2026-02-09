@@ -1,4 +1,4 @@
-module vgi
+module gen
 
 fn test_get_default_repository() {
 	repo := get_default_repository()
