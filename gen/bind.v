@@ -596,7 +596,6 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 // generate_c_method_declarations generates C function declarations for methods
 fn generate_c_method_declarations(info ObjectInfo) string {
 	mut content := ''
-	mut has_methods := false
 
 	n_methods := info.get_n_methods()
 	for i in 0 .. int(n_methods) {
@@ -614,8 +613,6 @@ fn generate_c_method_declarations(info ObjectInfo) string {
 			method.free()
 			continue
 		}
-
-		has_methods = true
 
 		// build C parameter list
 		mut c_params := ['obj voidptr']
@@ -681,9 +678,7 @@ fn generate_c_method_declarations(info ObjectInfo) string {
 		method.free()
 	}
 
-	if has_methods {
-		content += '\n'
-	}
+	content += '\n'
 
 	return content
 }
@@ -691,6 +686,7 @@ fn generate_c_method_declarations(info ObjectInfo) string {
 // generates C function declarations for interface methods
 fn generate_c_interface_method_declarations(info InterfaceInfo) string {
 	mut content := ''
+	mut has_methods := false
 
 	n_methods := info.get_n_methods()
 	for j in 0 .. int(n_methods) {
@@ -708,6 +704,8 @@ fn generate_c_interface_method_declarations(info InterfaceInfo) string {
 			method.free()
 			continue
 		}
+
+		has_methods = true
 
 		// build C parameter list
 		mut c_params := ['obj voidptr']
@@ -770,6 +768,10 @@ fn generate_c_interface_method_declarations(info InterfaceInfo) string {
 		content += 'fn C.${symbol}(${c_params.join(', ')}) ${c_return_type}\n'
 
 		method.free()
+	}
+
+	if has_methods {
+		content += '\n'
 	}
 
 	return content
