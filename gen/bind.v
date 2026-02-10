@@ -39,6 +39,7 @@ pub fn generate_bindings(library string, version string) {
 	// generate helper files
 	generate_readme(binding_dir, library, loaded_version, typelib_path)
 	generate_v_util(binding_dir)
+	generate_compat_c(binding_dir, library, loaded_version)
 
 	// generate object and interface bindings
 	n_infos := repo.get_n_infos(library)
@@ -84,7 +85,88 @@ Typelib: ${typelib_path}
 	}
 }
 
-// generate_compat_c generates C interop declarations for the binding module
+// get_library_c_info returns pkg-config name and include path for a library
+fn get_library_c_info(library string, version string) (string, string) {
+	lib_lower := library.to_lower()
+	version_parts := version.split('.')
+	version_major := if version_parts.len > 0 { version_parts[0] } else { '' }
+
+	// hardcoded mappings for known libraries
+	match lib_lower {
+		'glib' {
+			return 'glib-2.0', '<glib.h>'
+		}
+		'gobject' {
+			return 'gobject-2.0', '<glib-object.h>'
+		}
+		'gio' {
+			return 'gio-2.0', '<gio/gio.h>'
+		}
+		'gtk' {
+			if version_major == '4' {
+				return 'gtk4', '<gtk/gtk.h>'
+			} else if version_major == '3' {
+				return 'gtk+-3.0', '<gtk/gtk.h>'
+			}
+			return 'gtk4', '<gtk/gtk.h>'
+		}
+		'gdk' {
+			if version_major == '4' {
+				return 'gtk4', '<gdk/gdk.h>'
+			} else if version_major == '3' {
+				return 'gdk-3.0', '<gdk/gdk.h>'
+			}
+			return 'gtk4', '<gdk/gdk.h>'
+		}
+		'pango' {
+			return 'pango', '<pango/pango.h>'
+		}
+		'pangocairo' {
+			return 'pangocairo', '<pango/pangocairo.h>'
+		}
+		'cairo' {
+			return 'cairo', '<cairo.h>'
+		}
+		'atk' {
+			return 'atk', '<atk/atk.h>'
+		}
+		'gdk-pixbuf', 'gdkpixbuf' {
+			return 'gdk-pixbuf-2.0', '<gdk-pixbuf/gdk-pixbuf.h>'
+		}
+		'gmodule' {
+			return 'gmodule-2.0', '<glib.h>'
+		}
+		'gthread' {
+			return 'gthread-2.0', '<glib.h>'
+		}
+		else {
+			// fallback: use library-version for pkg-config and library/library.h for include
+			pkgconfig_name := '${lib_lower}-${version}'
+			include_path := '<${lib_lower}/${lib_lower}.h>'
+			return pkgconfig_name, include_path
+		}
+	}
+}
+
+// generate_compat_c generates C interop file with pkgconfig and includes
+fn generate_compat_c(binding_dir string, library string, version string) {
+	compat_path := os.join_path(binding_dir, 'compat.c.v')
+	module_name := os.file_name(binding_dir)
+
+	pkgconfig_name, include_path := get_library_c_info(library, version)
+
+	content := 'module ${module_name}
+
+#pkgconfig ${pkgconfig_name}
+#include ${include_path}
+'
+
+	os.write_file(compat_path, content) or {
+		eprintln('Warning: Failed to write ${compat_path}')
+		return
+	}
+}
+
 // generate_v_util generates helper functions for property access
 fn generate_v_util(binding_dir string) {
 	util_path := os.join_path(binding_dir, 'v_util.v')
