@@ -2,7 +2,7 @@ module gen
 
 import os
 
-// generate_enum_binding generates V enum/flags from EnumInfo
+// generate V enum/flags from EnumInfo
 fn generate_enum_binding(info EnumInfo, binding_dir string) {
 	enum_name := info.get_name()
 	file_name := enum_name.to_lower() + '.v'

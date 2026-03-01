@@ -2,7 +2,7 @@ module gen
 
 import os
 
-// generate_object_binding generates V file for an object
+// generate V file for an object
 fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	object_name := info.get_name()
 	file_name := object_name.to_lower() + '.v'
@@ -76,7 +76,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 }
 
-// get_property_v_type returns the V type for a property that matches the helper function
+// return the V type for a property that matches the helper function
 fn get_property_v_type(prop PropertyInfo) string {
 	helper := prop.get_property_helper_name()
 	// map helper name to correct V type for the helper function parameter
@@ -94,7 +94,7 @@ fn get_property_v_type(prop PropertyInfo) string {
 	}
 }
 
-// generate_properties_struct generates @[params] properties struct
+// generate @[params] properties struct
 fn generate_properties_struct(info ObjectInfo, object_name string, parent_name string, parent_embed string) string {
 	mut content := '@[params]\n'
 	content += 'pub struct ${object_name}Properties {\n'
@@ -131,7 +131,7 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 	return content
 }
 
-// generate_constructor generates Object.new() constructor
+// generate Object.new() constructor
 fn generate_constructor(info ObjectInfo, object_name string) string {
 	type_init := info.get_type_init()
 	if type_init == '' {
@@ -173,7 +173,7 @@ fn generate_constructor(info ObjectInfo, object_name string) string {
 	return content
 }
 
-// generate_property_methods generates property getter/setter methods
+// generate property getter/setter methods
 fn generate_property_methods(info ObjectInfo, object_name string) string {
 	mut content := ''
 
@@ -217,7 +217,7 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 	return content
 }
 
-// generate_c_method_declarations generates C function declarations for methods
+// generate C function declarations for methods
 fn generate_c_method_declarations(info ObjectInfo) string {
 	mut content := ''
 
@@ -312,7 +312,7 @@ fn generate_c_method_declarations(info ObjectInfo) string {
 	return content
 }
 
-// generate_object_methods generates object method bindings
+// generate object method bindings
 fn generate_object_methods(info ObjectInfo, object_name string) string {
 	mut content := ''
 
@@ -438,7 +438,7 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 	return content
 }
 
-// generate_object_interface_implementations generates interface method implementations on an object
+// generate interface method implementations on an object
 fn generate_object_interface_implementations(info ObjectInfo, object_name string) string {
 	mut content := ''
 

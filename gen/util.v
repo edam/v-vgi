@@ -9,7 +9,7 @@ pub fn get_vmod_path(rel_path string) string {
 	return os.join_path(vmod_path, rel_path)
 }
 
-// sanitize_param_name converts parameter names that conflict with V keywords
+// convert parameter names that conflict with V keywords
 pub fn sanitize_param_name(name string) string {
 	return match name {
 		'string', 'type', 'struct', 'enum', 'interface', 'fn', 'const',
@@ -27,7 +27,7 @@ pub fn sanitize_param_name(name string) string {
 	}
 }
 
-// get_binding_dir_name converts library name and version to directory name
+// convert library name and version to directory name
 // e.g., "Gtk-4.0" becomes "gtk_4_0"
 pub fn get_binding_dir_name(library string, version string) string {
 	lib_lower := library.to_lower().replace('-', '_')

@@ -5,14 +5,14 @@ pub struct Repository {
 	ptr &C.GIRepository
 }
 
-// get_default_repository returns the default GIRepository singleton
+// return the default GIRepository singleton
 pub fn get_default_repository() Repository {
 	return Repository{
 		ptr: C.gi_repository_dup_default()
 	}
 }
 
-// require loads a namespace with the given version
+// loads a namespace with the given version
 pub fn (r Repository) require(namespace string, version string) ! {
 	mut gerror := &C.GError(unsafe { nil })
 	result := C.gi_repository_require(r.ptr, namespace.str, version.str, 0, &gerror)
@@ -27,12 +27,12 @@ pub fn (r Repository) require(namespace string, version string) ! {
 	}
 }
 
-// get_n_infos returns the number of metadata entries in the namespace
+// return the number of metadata entries in the namespace
 pub fn (r Repository) get_n_infos(namespace string) u32 {
 	return C.gi_repository_get_n_infos(r.ptr, namespace.str)
 }
 
-// get_typelib_path returns the full path to the typelib file for a namespace
+// return the full path to the typelib file for a namespace
 pub fn (r Repository) get_typelib_path(namespace string) string {
 	path := C.gi_repository_get_typelib_path(r.ptr, namespace.str)
 	if path == unsafe { nil } {
@@ -41,7 +41,7 @@ pub fn (r Repository) get_typelib_path(namespace string) string {
 	return unsafe { cstring_to_vstring(path) }
 }
 
-// get_version returns the version of a loaded namespace
+// return the version of a loaded namespace
 pub fn (r Repository) get_version(namespace string) string {
 	version := C.gi_repository_get_version(r.ptr, namespace.str)
 	if version == unsafe { nil } {
@@ -50,7 +50,7 @@ pub fn (r Repository) get_version(namespace string) string {
 	return unsafe { cstring_to_vstring(version) }
 }
 
-// get_info returns the metadata info at the given index
+// return the metadata info at the given index
 pub fn (r Repository) get_info(namespace string, index int) ?BaseInfo {
 	info_ptr := C.gi_repository_get_info(r.ptr, namespace.str, index)
 	if info_ptr == unsafe { nil } {
@@ -66,14 +66,14 @@ pub struct BaseInfo {
 	ptr &C.GIBaseInfo
 }
 
-// free unreferences the info
+// unreferences the info
 pub fn (info &BaseInfo) free() {
 	if info.ptr != unsafe { nil } {
 		C.gi_base_info_unref(info.ptr)
 	}
 }
 
-// get_name returns the name of the info
+// return the name of the info
 pub fn (info BaseInfo) get_name() string {
 	name := C.gi_base_info_get_name(info.ptr)
 	if name == unsafe { nil } {
@@ -82,7 +82,7 @@ pub fn (info BaseInfo) get_name() string {
 	return unsafe { cstring_to_vstring(name) }
 }
 
-// get_namespace returns the namespace of the info
+// return the namespace of the info
 pub fn (info BaseInfo) get_namespace() string {
 	namespace := C.gi_base_info_get_namespace(info.ptr)
 	if namespace == unsafe { nil } {
@@ -91,7 +91,7 @@ pub fn (info BaseInfo) get_namespace() string {
 	return unsafe { cstring_to_vstring(namespace) }
 }
 
-// get_type_name returns the GObject type name of the info (e.g., "GIFunctionInfo", "GIObjectInfo")
+// return the GObject type name of the info (e.g., "GIFunctionInfo", "GIObjectInfo")
 pub fn (info BaseInfo) get_type_name() string {
 	type_name := C.G_OBJECT_TYPE_NAME(info.ptr)
 	if type_name == unsafe { nil } {
@@ -100,7 +100,7 @@ pub fn (info BaseInfo) get_type_name() string {
 	return unsafe { cstring_to_vstring(type_name) }
 }
 
-// get_type returns a simplified type string (e.g., "function", "object")
+// return a simplified type string (e.g., "function", "object")
 pub fn (info BaseInfo) get_type() string {
 	type_name := info.get_type_name()
 	// GIFunctionInfo -> function, GIObjectInfo -> object, etc.
@@ -117,14 +117,14 @@ pub struct ObjectInfo {
 	BaseInfo
 }
 
-// as_object_info casts BaseInfo to ObjectInfo
+// casts BaseInfo to ObjectInfo
 pub fn (info BaseInfo) as_object_info() ObjectInfo {
 	return ObjectInfo{
 		BaseInfo: info
 	}
 }
 
-// get_parent returns the parent object info, if any
+// return the parent object info, if any
 pub fn (info ObjectInfo) get_parent() ?ObjectInfo {
 	parent_ptr := C.gi_object_info_get_parent(&C.GIObjectInfo(info.ptr))
 	if parent_ptr == unsafe { nil } {
@@ -137,12 +137,12 @@ pub fn (info ObjectInfo) get_parent() ?ObjectInfo {
 	}
 }
 
-// get_n_properties returns the number of properties
+// return the number of properties
 pub fn (info ObjectInfo) get_n_properties() u32 {
 	return C.gi_object_info_get_n_properties(&C.GIObjectInfo(info.ptr))
 }
 
-// get_property returns property info at index
+// return property info at index
 pub fn (info ObjectInfo) get_property(n u32) ?PropertyInfo {
 	prop_ptr := C.gi_object_info_get_property(&C.GIObjectInfo(info.ptr), n)
 	if prop_ptr == unsafe { nil } {
@@ -155,12 +155,12 @@ pub fn (info ObjectInfo) get_property(n u32) ?PropertyInfo {
 	}
 }
 
-// get_n_methods returns the number of methods
+// return the number of methods
 pub fn (info ObjectInfo) get_n_methods() u32 {
 	return C.gi_object_info_get_n_methods(&C.GIObjectInfo(info.ptr))
 }
 
-// get_method returns method info at index
+// return method info at index
 pub fn (info ObjectInfo) get_method(n u32) ?FunctionInfo {
 	method_ptr := C.gi_object_info_get_method(&C.GIObjectInfo(info.ptr), n)
 	if method_ptr == unsafe { nil } {
@@ -173,12 +173,12 @@ pub fn (info ObjectInfo) get_method(n u32) ?FunctionInfo {
 	}
 }
 
-// get_n_interfaces returns the number of interfaces implemented
+// return the number of interfaces implemented
 pub fn (info ObjectInfo) get_n_interfaces() u32 {
 	return C.gi_object_info_get_n_interfaces(&C.GIObjectInfo(info.ptr))
 }
 
-// get_interface returns interface info at index
+// return interface info at index
 pub fn (info ObjectInfo) get_interface(n u32) ?InterfaceInfo {
 	iface_ptr := C.gi_object_info_get_interface(&C.GIObjectInfo(info.ptr), n)
 	if iface_ptr == unsafe { nil } {
@@ -191,7 +191,7 @@ pub fn (info ObjectInfo) get_interface(n u32) ?InterfaceInfo {
 	}
 }
 
-// get_type_init returns the type initialization function name
+// return the type initialization function name
 pub fn (info ObjectInfo) get_type_init() string {
 	type_init := C.gi_registered_type_info_get_type_init_function_name(&C.GIRegisteredTypeInfo(info.ptr))
 	if type_init == unsafe { nil } {
@@ -205,19 +205,19 @@ pub struct PropertyInfo {
 	BaseInfo
 }
 
-// is_readable returns true if the property is readable
+// return true if the property is readable
 pub fn (info PropertyInfo) is_readable() bool {
 	flags := C.gi_property_info_get_flags(&C.GIPropertyInfo(info.ptr))
 	return (flags & gi_property_readable) != 0
 }
 
-// is_writable returns true if the property is writable
+// return true if the property is writable
 pub fn (info PropertyInfo) is_writable() bool {
 	flags := C.gi_property_info_get_flags(&C.GIPropertyInfo(info.ptr))
 	return (flags & gi_property_writable) != 0
 }
 
-// get_type_info returns the type information for the property
+// return the type information for the property
 pub fn (info PropertyInfo) get_type_info() TypeInfo {
 	type_ptr := C.gi_property_info_get_type_info(&C.GIPropertyInfo(info.ptr))
 	return TypeInfo{
@@ -227,7 +227,7 @@ pub fn (info PropertyInfo) get_type_info() TypeInfo {
 	}
 }
 
-// get_v_type returns the V type string for the property
+// return the V type string for the property
 pub fn (info PropertyInfo) get_v_type() string {
 	type_info := info.get_type_info()
 	v_type := type_info.to_v_type()
@@ -235,7 +235,7 @@ pub fn (info PropertyInfo) get_v_type() string {
 	return v_type
 }
 
-// get_gtype_constant returns the GType constant name
+// return the GType constant name
 pub fn (info PropertyInfo) get_gtype_constant() string {
 	type_info := info.get_type_info()
 	gtype := type_info.to_gtype_constant()
@@ -243,7 +243,7 @@ pub fn (info PropertyInfo) get_gtype_constant() string {
 	return gtype
 }
 
-// get_gvalue_getter returns the g_value_get_* function name
+// return the g_value_get_* function name
 pub fn (info PropertyInfo) get_gvalue_getter() string {
 	type_info := info.get_type_info()
 	getter := type_info.to_gvalue_getter()
@@ -251,7 +251,7 @@ pub fn (info PropertyInfo) get_gvalue_getter() string {
 	return getter
 }
 
-// get_gvalue_setter returns the g_value_set_* function name
+// return the g_value_set_* function name
 pub fn (info PropertyInfo) get_gvalue_setter() string {
 	type_info := info.get_type_info()
 	setter := type_info.to_gvalue_setter()
@@ -259,7 +259,7 @@ pub fn (info PropertyInfo) get_gvalue_setter() string {
 	return setter
 }
 
-// needs_string_conversion returns true if property needs cstring conversion
+// return true if property needs cstring conversion
 pub fn (info PropertyInfo) needs_string_conversion() bool {
 	type_info := info.get_type_info()
 	needs := type_info.needs_string_conversion()
@@ -267,7 +267,7 @@ pub fn (info PropertyInfo) needs_string_conversion() bool {
 	return needs
 }
 
-// get_property_helper_name returns the helper function name prefix
+// return the helper function name prefix
 pub fn (info PropertyInfo) get_property_helper_name() string {
 	type_info := info.get_type_info()
 	helper := type_info.to_property_helper_name()
@@ -280,12 +280,12 @@ pub struct FunctionInfo {
 	BaseInfo
 }
 
-// get_n_args returns the number of arguments
+// return the number of arguments
 pub fn (info FunctionInfo) get_n_args() u32 {
 	return C.gi_callable_info_get_n_args(&C.GICallableInfo(info.ptr))
 }
 
-// get_arg returns argument info at index
+// return argument info at index
 pub fn (info FunctionInfo) get_arg(n u32) ?ArgInfo {
 	arg_ptr := C.gi_callable_info_get_arg(&C.GICallableInfo(info.ptr), n)
 	if arg_ptr == unsafe { nil } {
@@ -298,7 +298,7 @@ pub fn (info FunctionInfo) get_arg(n u32) ?ArgInfo {
 	}
 }
 
-// get_return_type returns the return type info
+// return the return type info
 pub fn (info FunctionInfo) get_return_type() TypeInfo {
 	type_ptr := C.gi_callable_info_get_return_type(&C.GICallableInfo(info.ptr))
 	return TypeInfo{
@@ -308,22 +308,22 @@ pub fn (info FunctionInfo) get_return_type() TypeInfo {
 	}
 }
 
-// may_return_null returns true if function can return null
+// return true if function can return null
 pub fn (info FunctionInfo) may_return_null() bool {
 	return C.gi_callable_info_may_return_null(&C.GICallableInfo(info.ptr))
 }
 
-// skip_return returns true if return value should be skipped
+// return true if return value should be skipped
 pub fn (info FunctionInfo) skip_return() bool {
 	return C.gi_callable_info_skip_return(&C.GICallableInfo(info.ptr))
 }
 
-// can_throw_gerror returns whether the function can throw a GError
+// return true if the function can throw a GError
 pub fn (info FunctionInfo) can_throw_gerror() bool {
 	return C.gi_callable_info_can_throw_gerror(&C.GICallableInfo(info.ptr))
 }
 
-// get_symbol returns the C symbol name for the function
+// return the C symbol name for the function
 pub fn (info FunctionInfo) get_symbol() string {
 	symbol := C.gi_function_info_get_symbol(&C.GIFunctionInfo(info.ptr))
 	if symbol == unsafe { nil } {
@@ -337,19 +337,19 @@ pub struct InterfaceInfo {
 	BaseInfo
 }
 
-// as_interface_info casts BaseInfo to InterfaceInfo
+// casts BaseInfo to InterfaceInfo
 pub fn (info BaseInfo) as_interface_info() InterfaceInfo {
 	return InterfaceInfo{
 		BaseInfo: info
 	}
 }
 
-// get_n_methods returns the number of methods
+// return the number of methods
 pub fn (info InterfaceInfo) get_n_methods() u32 {
 	return C.gi_interface_info_get_n_methods(&C.GIInterfaceInfo(info.ptr))
 }
 
-// get_method returns method info at index
+// return method info at index
 pub fn (info InterfaceInfo) get_method(n u32) ?FunctionInfo {
 	method_ptr := C.gi_interface_info_get_method(&C.GIInterfaceInfo(info.ptr), n)
 	if method_ptr == unsafe { nil } {
@@ -362,12 +362,12 @@ pub fn (info InterfaceInfo) get_method(n u32) ?FunctionInfo {
 	}
 }
 
-// get_n_prerequisites returns the number of prerequisites (parent interfaces)
+// return the number of prerequisites (parent interfaces)
 pub fn (info InterfaceInfo) get_n_prerequisites() u32 {
 	return C.gi_interface_info_get_n_prerequisites(&C.GIInterfaceInfo(info.ptr))
 }
 
-// get_prerequisite returns prerequisite info at index
+// return prerequisite info at index
 pub fn (info InterfaceInfo) get_prerequisite(n u32) ?BaseInfo {
 	prereq_ptr := C.gi_interface_info_get_prerequisite(&C.GIInterfaceInfo(info.ptr), n)
 	if prereq_ptr == unsafe { nil } {
@@ -383,19 +383,19 @@ pub struct EnumInfo {
 	BaseInfo
 }
 
-// as_enum_info casts BaseInfo to EnumInfo
+// casts BaseInfo to EnumInfo
 pub fn (info BaseInfo) as_enum_info() EnumInfo {
 	return EnumInfo{
 		BaseInfo: info
 	}
 }
 
-// get_n_values returns the number of values in the enum
+// return the number of values in the enum
 pub fn (info EnumInfo) get_n_values() u32 {
 	return C.gi_enum_info_get_n_values(&C.GIEnumInfo(info.ptr))
 }
 
-// get_value returns value info at index
+// return value info at index
 pub fn (info EnumInfo) get_value(n u32) ?ValueInfo {
 	value_ptr := C.gi_enum_info_get_value(&C.GIEnumInfo(info.ptr), n)
 	if value_ptr == unsafe { nil } {
@@ -408,7 +408,7 @@ pub fn (info EnumInfo) get_value(n u32) ?ValueInfo {
 	}
 }
 
-// get_storage_type returns the storage type for the enum
+// return the storage type for the enum
 pub fn (info EnumInfo) get_storage_type() int {
 	return C.gi_enum_info_get_storage_type(&C.GIEnumInfo(info.ptr))
 }
@@ -418,7 +418,7 @@ pub struct ValueInfo {
 	BaseInfo
 }
 
-// get_value returns the integer value
+// return the integer value
 pub fn (info ValueInfo) get_value() i64 {
 	return C.gi_value_info_get_value(&C.GIValueInfo(info.ptr))
 }
@@ -428,12 +428,12 @@ pub struct ArgInfo {
 	BaseInfo
 }
 
-// get_direction returns the argument direction (in/out/inout)
+// return the argument direction (in/out/inout)
 pub fn (info ArgInfo) get_direction() int {
 	return C.gi_arg_info_get_direction(&C.GIArgInfo(info.ptr))
 }
 
-// get_type_info returns the type information for the argument
+// return the type information for the argument
 pub fn (info ArgInfo) get_type_info() TypeInfo {
 	type_ptr := C.gi_arg_info_get_type_info(&C.GIArgInfo(info.ptr))
 	return TypeInfo{
@@ -443,12 +443,12 @@ pub fn (info ArgInfo) get_type_info() TypeInfo {
 	}
 }
 
-// may_be_null returns true if argument can be null
+// return true if argument can be null
 pub fn (info ArgInfo) may_be_null() bool {
 	return C.gi_arg_info_may_be_null(&C.GIArgInfo(info.ptr))
 }
 
-// get_v_type returns the V type string for the argument
+// return the V type string for the argument
 pub fn (info ArgInfo) get_v_type() string {
 	type_info := info.get_type_info()
 	v_type := type_info.to_v_type()
@@ -461,12 +461,12 @@ pub struct TypeInfo {
 	BaseInfo
 }
 
-// get_tag returns the type tag
+// return the type tag
 pub fn (info TypeInfo) get_tag() int {
 	return C.gi_type_info_get_tag(&C.GITypeInfo(info.ptr))
 }
 
-// to_v_type converts the type to a V type string for use in generated code
+// converts the type to a V type string for use in generated code
 pub fn (info TypeInfo) to_v_type() string {
 	tag := info.get_tag()
 	return match tag {
@@ -488,7 +488,7 @@ pub fn (info TypeInfo) to_v_type() string {
 	}
 }
 
-// to_gtype_constant returns the GType constant name for code generation
+// return the GType constant name for code generation
 pub fn (info TypeInfo) to_gtype_constant() string {
 	tag := info.get_tag()
 	return match tag {
@@ -497,16 +497,15 @@ pub fn (info TypeInfo) to_gtype_constant() string {
 		gi_type_tag_int8, gi_type_tag_int16, gi_type_tag_int32 { 'g_type_int' }
 		gi_type_tag_uint8, gi_type_tag_uint16, gi_type_tag_uint32 { 'g_type_uint' }
 		gi_type_tag_int64 { 'g_type_int64' }
-		gi_type_tag_uint64 { 'g_type_uint64' }
+		gi_type_tag_uint64, gi_type_tag_gtype { 'g_type_uint64' }
 		gi_type_tag_float { 'g_type_float' }
 		gi_type_tag_double { 'g_type_double' }
 		gi_type_tag_utf8, gi_type_tag_filename { 'g_type_string' }
-		gi_type_tag_gtype { 'g_type_uint64' }
 		else { 'g_type_pointer' }
 	}
 }
 
-// to_gvalue_getter returns the g_value_get_* function name
+// return the g_value_get_* function name
 pub fn (info TypeInfo) to_gvalue_getter() string {
 	tag := info.get_tag()
 	return match tag {
@@ -522,7 +521,7 @@ pub fn (info TypeInfo) to_gvalue_getter() string {
 	}
 }
 
-// to_gvalue_setter returns the g_value_set_* function name
+// return the g_value_set_* function name
 pub fn (info TypeInfo) to_gvalue_setter() string {
 	tag := info.get_tag()
 	return match tag {
@@ -538,13 +537,13 @@ pub fn (info TypeInfo) to_gvalue_setter() string {
 	}
 }
 
-// needs_string_conversion returns true if the type needs cstring conversion
+// return true if the type needs cstring conversion
 pub fn (info TypeInfo) needs_string_conversion() bool {
 	tag := info.get_tag()
 	return tag == gi_type_tag_utf8 || tag == gi_type_tag_filename
 }
 
-// to_property_helper_name returns the helper function name prefix (e.g., "bool", "int", "string")
+// return the helper function name prefix (e.g., "bool", "int", "string")
 pub fn (info TypeInfo) to_property_helper_name() string {
 	tag := info.get_tag()
 	return match tag {

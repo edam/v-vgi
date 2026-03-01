@@ -2,7 +2,7 @@ module gen
 
 import os
 
-// generate_c_interface_method_declarations generates C function declarations for interface methods
+// generate C function declarations for interface methods
 fn generate_c_interface_method_declarations(info InterfaceInfo) string {
 	mut content := ''
 	mut has_methods := false
@@ -101,7 +101,7 @@ fn generate_c_interface_method_declarations(info InterfaceInfo) string {
 	return content
 }
 
-// generate_interface_binding generates V file for an interface
+// generate V file for an interface
 fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 	interface_name := info.get_name()
 	file_name := interface_name.to_lower() + '.v'
@@ -174,7 +174,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 	}
 }
 
-// generate_interface_methods generates methods on the concrete interface struct
+// generate methods on the concrete interface struct
 fn generate_interface_methods(info InterfaceInfo, interface_name string) string {
 	mut content := ''
 

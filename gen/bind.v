@@ -2,7 +2,7 @@ module gen
 
 import os
 
-// generate_bindings generates V bindings for a library
+// generate V bindings for a library
 pub fn generate_bindings(library string, version string) {
 	repo := get_default_repository()
 
@@ -71,7 +71,7 @@ pub fn generate_bindings(library string, version string) {
 	println('bindings for ${library}-${version} generated at ${base_module}.${dir_name}')
 }
 
-// generate_readme generates README.md with binding metadata
+// generate README.md with binding metadata
 fn generate_readme(binding_dir string, library string, version string, typelib_path string) {
 	readme_path := os.join_path(binding_dir, 'README.md')
 
@@ -87,7 +87,7 @@ Typelib: ${typelib_path}
 	}
 }
 
-// get_library_c_info returns pkg-config name and include path for a library
+// return pkg-config name and include path for a library
 fn get_library_c_info(library string, version string) (string, string) {
 	lib_lower := library.to_lower()
 	version_parts := version.split('.')
@@ -150,7 +150,7 @@ fn get_library_c_info(library string, version string) (string, string) {
 	}
 }
 
-// generate_compat_c generates C interop file with pkgconfig and includes
+// generate C interop file with pkgconfig and includes
 fn generate_compat_c(binding_dir string, library string, version string) {
 	compat_path := os.join_path(binding_dir, 'compat.c.v')
 	module_name := os.file_name(binding_dir)
@@ -212,14 +212,14 @@ fn C.g_type_pointer() u64
 	}
 }
 
-// generate_v_util generates helper functions for property access
+// generate helper functions for property access
 fn generate_v_util(binding_dir string) {
 	util_path := os.join_path(binding_dir, 'v_util.v')
 	module_name := os.file_name(binding_dir)
 
 	mut content := 'module ${module_name}
 
-// v_get_shared_error returns a pointer to the shared GError (singleton pattern)
+// return a pointer to the shared GError (singleton pattern)
 @[unsafe]
 fn v_get_shared_error() &&C.GError {
 	unsafe {
@@ -228,7 +228,7 @@ fn v_get_shared_error() &&C.GError {
 	}
 }
 
-// v_check_shared_error checks the shared GError and throws if set, otherwise returns
+// check the shared GError and throw if set
 fn v_check_shared_error() ! {
 	gerror_ptr := unsafe { v_get_shared_error() }
 	gerror := unsafe { *gerror_ptr }
@@ -240,7 +240,7 @@ fn v_check_shared_error() ! {
 	}
 }
 
-// v_check_shared_error_or_return checks the shared GError and either returns the value or throws
+// check the shared GError and either return the value or throw
 fn v_check_shared_error_or_return[T](value T) !T {
 	gerror_ptr := unsafe { v_get_shared_error() }
 	gerror := unsafe { *gerror_ptr }
