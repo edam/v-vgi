@@ -42,10 +42,10 @@ fn get_version() string {
 
 fn (mut o Options) process_arg(arg string, val ?string) ! {
 	match arg {
-		'info' {
+		'info', 'i' {
 			o.info = true
 		}
-		'list' {
+		'list', 'l' {
 			o.list = true
 		}
 		'help' {
