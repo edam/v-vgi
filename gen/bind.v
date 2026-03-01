@@ -66,7 +66,9 @@ pub fn generate_bindings(library string, version string) {
 		info.free()
 	}
 
-	println('Generated bindings for ${library}-${version} in ${dir_name}/')
+	module_parts := @MOD.split('.')
+	base_module := module_parts[..module_parts.len - 1].join('.')
+	println('bindings for ${library}-${version} generated at ${base_module}.${dir_name}')
 }
 
 // generate_readme generates README.md with binding metadata
@@ -159,27 +161,20 @@ fn generate_compat_c(binding_dir string, library string, version string) {
 
 #pkgconfig ${pkgconfig_name}
 #include ${include_path}
-'
 
-	os.write_file(compat_path, content) or {
-		eprintln('Warning: Failed to write ${compat_path}')
-		return
-	}
-}
-
-// generate_v_util generates helper functions for property access
-fn generate_v_util(binding_dir string) {
-	util_path := os.join_path(binding_dir, 'v_util.v')
-	module_name := os.file_name(binding_dir)
-
-	mut content := 'module ${module_name}
-
-// C declarations for GObject functions using voidptr to avoid cross-module type conflicts
+// C declarations for GObject/GLib functions using voidptr to avoid cross-module type conflicts
 fn C.g_object_get_property(object voidptr, property_name &char, value voidptr)
 fn C.g_object_set_property(object voidptr, property_name &char, value voidptr)
+fn C.g_error_free(error &C.GError)
 
 fn C.g_value_init(value voidptr, g_type u64) voidptr
 fn C.g_value_unset(value voidptr)
+
+@[typedef]
+pub struct C.GError {
+pub:
+	message &char
+}
 
 fn C.g_value_get_boolean(value voidptr) bool
 fn C.g_value_set_boolean(value voidptr, v_boolean bool)
@@ -209,6 +204,54 @@ fn C.g_type_float() u64
 fn C.g_type_double() u64
 fn C.g_type_string() u64
 fn C.g_type_pointer() u64
+'
+
+	os.write_file(compat_path, content) or {
+		eprintln('Warning: Failed to write ${compat_path}')
+		return
+	}
+}
+
+// generate_v_util generates helper functions for property access
+fn generate_v_util(binding_dir string) {
+	util_path := os.join_path(binding_dir, 'v_util.v')
+	module_name := os.file_name(binding_dir)
+
+	mut content := 'module ${module_name}
+
+// v_get_shared_error returns a pointer to the shared GError (singleton pattern)
+@[unsafe]
+fn v_get_shared_error() &&C.GError {
+	unsafe {
+		mut static gerror := &C.GError(nil)
+		return &&C.GError(&gerror)
+	}
+}
+
+// v_check_shared_error checks the shared GError and throws if set, otherwise returns
+fn v_check_shared_error() ! {
+	gerror_ptr := unsafe { v_get_shared_error() }
+	gerror := unsafe { *gerror_ptr }
+	if gerror != unsafe { nil } {
+		msg := unsafe { cstring_to_vstring(gerror.message) }
+		C.g_error_free(gerror)
+		unsafe { *gerror_ptr = nil }
+		return error(msg)
+	}
+}
+
+// v_check_shared_error_or_return checks the shared GError and either returns the value or throws
+fn v_check_shared_error_or_return[T](value T) !T {
+	gerror_ptr := unsafe { v_get_shared_error() }
+	gerror := unsafe { *gerror_ptr }
+	if gerror != unsafe { nil } {
+		msg := unsafe { cstring_to_vstring(gerror.message) }
+		C.g_error_free(gerror)
+		unsafe { *gerror_ptr = nil }
+		return error(msg)
+	}
+	return value
+}
 
 // GValue is a C struct we need to allocate. size based on GValue definition (24 bytes on most systems)
 struct GValueBuffer {
@@ -646,6 +689,11 @@ fn generate_c_method_declarations(info ObjectInfo) string {
 			arg.free()
 		}
 
+		// add GError parameter if method can throw
+		if method.can_throw_gerror() {
+			c_params << 'error &&C.GError'
+		}
+
 		// get return type
 		return_type_info := method.get_return_type()
 		return_v_type := return_type_info.to_v_type()
@@ -736,6 +784,11 @@ fn generate_c_interface_method_declarations(info InterfaceInfo) string {
 			}
 
 			arg.free()
+		}
+
+		// add GError parameter if method can throw
+		if method.can_throw_gerror() {
+			c_params << 'error &&C.GError'
 		}
 
 		// get return type
@@ -838,35 +891,64 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 
 		skip_return := method.skip_return()
 		needs_string_conv := return_v_type == 'string'
+		can_throw := method.can_throw_gerror()
+
+		// determine V return type (add ! for error-throwing methods)
+		v_return_sig := if skip_return {
+			if can_throw { '!' } else { '' }
+		} else {
+			if can_throw { '!${return_v_type}' } else { return_v_type }
+		}
 
 		// generate method signature
+		content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${v_return_sig} {\n'
+
 		if skip_return {
 			// void return
-			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) {\n'
 			content += '\tC.${symbol}(obj.ptr'
 			if call_args.len > 0 {
 				content += ', ${call_args.join(', ')}'
 			}
+			if can_throw {
+				content += ', unsafe { v_get_shared_error() }'
+			}
 			content += ')\n'
-			content += '}\n\n'
+			if can_throw {
+				content += '\tv_check_shared_error()!\n'
+			}
 		} else {
 			// typed return
-			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_v_type} {\n'
-			if needs_string_conv {
-				content += '\treturn unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
+			if can_throw {
+				content += '\tv_result := '
 			} else {
-				content += '\treturn C.${symbol}(obj.ptr'
+				content += '\treturn '
+			}
+			if needs_string_conv {
+				content += 'unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
+			} else {
+				content += 'C.${symbol}(obj.ptr'
 			}
 			if call_args.len > 0 {
 				content += ', ${call_args.join(', ')}'
+			}
+			if can_throw {
+				// don't wrap in unsafe if already in unsafe block
+				if needs_string_conv {
+					content += ', v_get_shared_error()'
+				} else {
+					content += ', unsafe { v_get_shared_error() }'
+				}
 			}
 			if needs_string_conv {
 				content += ')) }\n'
 			} else {
 				content += ')\n'
 			}
-			content += '}\n\n'
+			if can_throw {
+				content += '\treturn v_check_shared_error_or_return(v_result)\n'
+			}
 		}
+		content += '}\n\n'
 
 		method.free()
 	}
@@ -1002,35 +1084,64 @@ fn generate_interface_methods(info InterfaceInfo, interface_name string) string 
 
 		skip_return := method.skip_return()
 		needs_string_conv := return_v_type == 'string'
+		can_throw := method.can_throw_gerror()
+
+		// determine V return type (add ! for error-throwing methods)
+		v_return_sig := if skip_return {
+			if can_throw { '!' } else { '' }
+		} else {
+			if can_throw { '!${return_v_type}' } else { return_v_type }
+		}
 
 		// generate method signature
+		content += 'pub fn (obj &${interface_name}) ${v_method_name}(${param_list}) ${v_return_sig} {\n'
+
 		if skip_return {
 			// void return
-			content += 'pub fn (obj &${interface_name}) ${v_method_name}(${param_list}) {\n'
 			content += '\tC.${symbol}(obj.ptr'
 			if call_args.len > 0 {
 				content += ', ${call_args.join(', ')}'
 			}
+			if can_throw {
+				content += ', unsafe { v_get_shared_error() }'
+			}
 			content += ')\n'
-			content += '}\n\n'
+			if can_throw {
+				content += '\tv_check_shared_error()!\n'
+			}
 		} else {
 			// typed return
-			content += 'pub fn (obj &${interface_name}) ${v_method_name}(${param_list}) ${return_v_type} {\n'
-			if needs_string_conv {
-				content += '\treturn unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
+			if can_throw {
+				content += '\tv_result := '
 			} else {
-				content += '\treturn C.${symbol}(obj.ptr'
+				content += '\treturn '
+			}
+			if needs_string_conv {
+				content += 'unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
+			} else {
+				content += 'C.${symbol}(obj.ptr'
 			}
 			if call_args.len > 0 {
 				content += ', ${call_args.join(', ')}'
+			}
+			if can_throw {
+				// don't wrap in unsafe if already in unsafe block
+				if needs_string_conv {
+					content += ', v_get_shared_error()'
+				} else {
+					content += ', unsafe { v_get_shared_error() }'
+				}
 			}
 			if needs_string_conv {
 				content += ')) }\n'
 			} else {
 				content += ')\n'
 			}
-			content += '}\n\n'
+			if can_throw {
+				content += '\treturn v_check_shared_error_or_return(v_result)\n'
+			}
 		}
+		content += '}\n\n'
 
 		method.free()
 	}
@@ -1140,35 +1251,59 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 
 			skip_return := method.skip_return()
 			needs_string_conv := return_v_type == 'string'
+			can_throw := method.can_throw_gerror()
+
+			// determine V return type (add ! for error-throwing methods)
+			v_return_sig := if skip_return {
+				if can_throw { '!' } else { '' }
+			} else {
+				if can_throw { '!${return_v_type}' } else { return_v_type }
+			}
 
 			// generate method signature
+			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${v_return_sig} {\n'
+
 			if skip_return {
 				// void return
-				content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) {\n'
 				content += '\tC.${symbol}(obj.ptr'
 				if call_args.len > 0 {
 					content += ', ${call_args.join(', ')}'
 				}
+				if can_throw {
+					content += ', unsafe { v_get_shared_error() }'
+				}
 				content += ')\n'
-				content += '}\n\n'
+				if can_throw {
+					content += '\tv_check_shared_error()!\n'
+				}
 			} else {
 				// typed return
-				content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_v_type} {\n'
-				if needs_string_conv {
-					content += '\treturn unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
+				if can_throw {
+					content += '\tv_result := '
 				} else {
-					content += '\treturn C.${symbol}(obj.ptr'
+					content += '\treturn '
+				}
+				if needs_string_conv {
+					content += 'unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
+				} else {
+					content += 'C.${symbol}(obj.ptr'
 				}
 				if call_args.len > 0 {
 					content += ', ${call_args.join(', ')}'
+				}
+				if can_throw {
+					content += ', unsafe { v_get_shared_error() }'
 				}
 				if needs_string_conv {
 					content += ')) }\n'
 				} else {
 					content += ')\n'
 				}
-				content += '}\n\n'
+				if can_throw {
+					content += '\treturn v_check_shared_error_or_return(v_result)\n'
+				}
 			}
+			content += '}\n\n'
 
 			method.free()
 		}

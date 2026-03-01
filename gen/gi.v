@@ -318,6 +318,11 @@ pub fn (info FunctionInfo) skip_return() bool {
 	return C.gi_callable_info_skip_return(&C.GICallableInfo(info.ptr))
 }
 
+// can_throw_gerror returns whether the function can throw a GError
+pub fn (info FunctionInfo) can_throw_gerror() bool {
+	return C.gi_callable_info_can_throw_gerror(&C.GICallableInfo(info.ptr))
+}
+
 // get_symbol returns the C symbol name for the function
 pub fn (info FunctionInfo) get_symbol() string {
 	symbol := C.gi_function_info_get_symbol(&C.GIFunctionInfo(info.ptr))

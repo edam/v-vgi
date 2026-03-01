@@ -48,6 +48,7 @@ fn C.gi_callable_info_get_arg(info &C.GICallableInfo, n u32) &C.GIArgInfo
 fn C.gi_callable_info_get_return_type(info &C.GICallableInfo) &C.GITypeInfo
 fn C.gi_callable_info_may_return_null(info &C.GICallableInfo) bool
 fn C.gi_callable_info_skip_return(info &C.GICallableInfo) bool
+fn C.gi_callable_info_can_throw_gerror(info &C.GICallableInfo) bool
 fn C.gi_function_info_get_symbol(info &C.GIFunctionInfo) &char
 fn C.gi_function_info_invoke(info &C.GIFunctionInfo, in_args &C.GIArgument, n_in_args int, out_args &C.GIArgument, n_out_args int, return_value &C.GIArgument, error &&C.GError) bool
 
