@@ -230,49 +230,43 @@ pub fn (info PropertyInfo) get_type_info() TypeInfo {
 // return the V type string for the property
 pub fn (info PropertyInfo) get_v_type() string {
 	type_info := info.get_type_info()
-	v_type := type_info.to_v_type()
-	type_info.free()
-	return v_type
+	defer { type_info.free() }
+	return type_info.to_v_type()
 }
 
 // return the GType constant name
 pub fn (info PropertyInfo) get_gtype_constant() string {
 	type_info := info.get_type_info()
-	gtype := type_info.to_gtype_constant()
-	type_info.free()
-	return gtype
+	defer { type_info.free() }
+	return type_info.to_gtype_constant()
 }
 
 // return the g_value_get_* function name
 pub fn (info PropertyInfo) get_gvalue_getter() string {
 	type_info := info.get_type_info()
-	getter := type_info.to_gvalue_getter()
-	type_info.free()
-	return getter
+	defer { type_info.free() }
+	return type_info.to_gvalue_getter()
 }
 
 // return the g_value_set_* function name
 pub fn (info PropertyInfo) get_gvalue_setter() string {
 	type_info := info.get_type_info()
-	setter := type_info.to_gvalue_setter()
-	type_info.free()
-	return setter
+	defer { type_info.free() }
+	return type_info.to_gvalue_setter()
 }
 
 // return true if property needs cstring conversion
 pub fn (info PropertyInfo) needs_string_conversion() bool {
 	type_info := info.get_type_info()
-	needs := type_info.needs_string_conversion()
-	type_info.free()
-	return needs
+	defer { type_info.free() }
+	return type_info.needs_string_conversion()
 }
 
 // return the helper function name prefix
 pub fn (info PropertyInfo) get_property_helper_name() string {
 	type_info := info.get_type_info()
-	helper := type_info.to_property_helper_name()
-	type_info.free()
-	return helper
+	defer { type_info.free() }
+	return type_info.to_property_helper_name()
 }
 
 // FunctionInfo represents a GIFunctionInfo
@@ -451,9 +445,8 @@ pub fn (info ArgInfo) may_be_null() bool {
 // return the V type string for the argument
 pub fn (info ArgInfo) get_v_type() string {
 	type_info := info.get_type_info()
-	v_type := type_info.to_v_type()
-	type_info.free()
-	return v_type
+	defer { type_info.free() }
+	return type_info.to_v_type()
 }
 
 // TypeInfo represents a GITypeInfo
@@ -466,11 +459,16 @@ pub fn (info TypeInfo) get_tag() int {
 	return C.gi_type_info_get_tag(&C.GITypeInfo(info.ptr))
 }
 
+// return true if the type is a pointer
+pub fn (info TypeInfo) is_pointer() bool {
+	return C.gi_type_info_is_pointer(&C.GITypeInfo(info.ptr))
+}
+
 // converts the type to a V type string for use in generated code
 pub fn (info TypeInfo) to_v_type() string {
-	tag := info.get_tag()
-	return match tag {
-		gi_type_tag_void { 'voidptr' }
+	type_tag := info.get_tag()
+	is_pointer := info.is_pointer()
+	base_type := match type_tag {
 		gi_type_tag_boolean { 'bool' }
 		gi_type_tag_int8 { 'i8' }
 		gi_type_tag_uint8 { 'u8' }
@@ -482,10 +480,12 @@ pub fn (info TypeInfo) to_v_type() string {
 		gi_type_tag_uint64 { 'u64' }
 		gi_type_tag_float { 'f32' }
 		gi_type_tag_double { 'f64' }
-		gi_type_tag_utf8, gi_type_tag_filename { 'string' }
-		gi_type_tag_gtype { 'u64' } // GType is typedef'd as size_t
-		else { 'voidptr' } // TODO: handle arrays, interfaces, lists, etc.
+		gi_type_tag_gtype { 'u64' } // size_t
+		gi_type_tag_void { return if is_pointer { 'voidptr' } else { 'void' } }
+		gi_type_tag_utf8, gi_type_tag_filename { return 'string' }
+		else { return 'voidptr' } // interfaces, arrays, lists, etc.
 	}
+	return if is_pointer { '&${base_type}' } else { base_type }
 }
 
 // return the GType constant name for code generation

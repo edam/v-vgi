@@ -44,7 +44,8 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 	// add C.g_object_new declaration for constructor
 	content += 'fn C.g_object_new(object_type u64, first_property_name &char) voidptr\n'
-	content += generate_c_method_declarations(info)
+	content += generate_object_c_method_declarations(info)
+	content += '\n'
 
 	// struct with embedded parent (no implements clause)
 	content += 'pub struct ${object_name} {\n'
@@ -73,24 +74,6 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	os.write_file(file_path, content) or {
 		eprintln('Warning: Failed to write ${file_path}')
 		return
-	}
-}
-
-// return the V type for a property that matches the helper function
-fn get_property_v_type(prop PropertyInfo) string {
-	helper := prop.get_property_helper_name()
-	// map helper name to correct V type for the helper function parameter
-	return match helper {
-		'bool' { 'bool' }
-		'int' { 'int' }
-		'uint' { 'u32' }
-		'int64' { 'i64' }
-		'uint64' { 'u64' }
-		'float' { 'f32' }
-		'double' { 'f64' }
-		'string' { 'string' }
-		'pointer' { 'voidptr' }
-		else { 'voidptr' }
 	}
 }
 
@@ -218,96 +201,15 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 }
 
 // generate C function declarations for methods
-fn generate_c_method_declarations(info ObjectInfo) string {
+fn generate_object_c_method_declarations(info ObjectInfo) string {
 	mut content := ''
 
 	n_methods := info.get_n_methods()
 	for i in 0 .. int(n_methods) {
 		method := info.get_method(u32(i)) or { continue }
-		method_name := method.get_name()
-
-		// skip private methods
-		if method_name.starts_with('_') {
-			method.free()
-			continue
-		}
-
-		symbol := method.get_symbol()
-		if symbol == '' {
-			method.free()
-			continue
-		}
-
-		// build C parameter list
-		mut c_params := ['obj voidptr']
-		n_args := method.get_n_args()
-
-		for j in 0 .. int(n_args) {
-			arg := method.get_arg(u32(j)) or { continue }
-			direction := arg.get_direction()
-
-			if direction == gi_direction_in {
-				arg_type := arg.get_v_type()
-				// convert V type to C type
-				c_type := match arg_type {
-					'string' { '&char' }
-					'bool' { 'bool' }
-					'i8' { 'i8' }
-					'u8' { 'u8' }
-					'i16' { 'i16' }
-					'u16' { 'u16' }
-					'int', 'i32' { 'int' }
-					'u32' { 'u32' }
-					'i64' { 'i64' }
-					'u64' { 'u64' }
-					'f32' { 'f32' }
-					'f64' { 'f64' }
-					else { 'voidptr' }
-				}
-				c_params << 'arg${j} ${c_type}'
-			}
-
-			arg.free()
-		}
-
-		// add GError parameter if method can throw
-		if method.can_throw_gerror() {
-			c_params << 'error &&C.GError'
-		}
-
-		// get return type
-		return_type_info := method.get_return_type()
-		return_v_type := return_type_info.to_v_type()
-		return_type_info.free()
-
-		skip_return := method.skip_return()
-
-		c_return_type := if skip_return || return_v_type == 'voidptr' {
-			'voidptr'
-		} else {
-			match return_v_type {
-				'string' { '&char' }
-				'bool' { 'bool' }
-				'i8' { 'i8' }
-				'u8' { 'u8' }
-				'i16' { 'i16' }
-				'u16' { 'u16' }
-				'int', 'i32' { 'int' }
-				'u32' { 'u32' }
-				'i64' { 'i64' }
-				'u64' { 'u64' }
-				'f32' { 'f32' }
-				'f64' { 'f64' }
-				else { 'voidptr' }
-			}
-		}
-
-		content += 'fn C.${symbol}(${c_params.join(', ')}) ${c_return_type}\n'
-
+		content += generate_c_method_declaration(method)
 		method.free()
 	}
-
-	content += '\n'
 
 	return content
 }
@@ -371,19 +273,13 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		return_v_type := return_type_info.to_v_type()
 		return_type_info.free()
 
-		skip_return := method.skip_return()
+		skip_return := method.skip_return() || return_v_type == 'void'
 		needs_string_conv := return_v_type == 'string'
 		can_throw := method.can_throw_gerror()
 
-		// determine V return type (add ! for error-throwing methods)
-		v_return_sig := if skip_return {
-			if can_throw { '!' } else { '' }
-		} else {
-			if can_throw { '!${return_v_type}' } else { return_v_type }
-		}
-
 		// generate method signature
-		content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${v_return_sig} {\n'
+		return_sig := get_v_return_sig(return_v_type, can_throw, skip_return)
+		content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_sig} {\n'
 
 		if skip_return {
 			// void return
@@ -538,19 +434,13 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 			return_v_type := return_type_info.to_v_type()
 			return_type_info.free()
 
-			skip_return := method.skip_return()
+			skip_return := method.skip_return() || return_v_type == 'void'
 			needs_string_conv := return_v_type == 'string'
 			can_throw := method.can_throw_gerror()
 
-			// determine V return type (add ! for error-throwing methods)
-			v_return_sig := if skip_return {
-				if can_throw { '!' } else { '' }
-			} else {
-				if can_throw { '!${return_v_type}' } else { return_v_type }
-			}
-
 			// generate method signature
-			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${v_return_sig} {\n'
+			return_sig := get_v_return_sig(return_v_type, can_throw, skip_return)
+			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_sig} {\n'
 
 			if skip_return {
 				// void return

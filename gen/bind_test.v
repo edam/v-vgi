@@ -29,7 +29,7 @@ fn test_generate_object_methods() {
 	obj := object_info or { panic('unreachable') }
 
 	// generate C declarations
-	c_decls := generate_c_method_declarations(obj)
+	c_decls := generate_object_c_method_declarations(obj)
 
 	// verify C declarations are generated
 	assert c_decls.contains('fn C.') || c_decls == '' // may have no public methods
@@ -104,7 +104,7 @@ fn test_generate_interface() {
 
 	if iface := interface_info {
 		// generate C declarations
-		c_decls := generate_c_interface_method_declarations(iface)
+		c_decls := generate_interface_c_method_declarations(iface)
 
 		// verify C declarations are generated
 		assert c_decls.contains('fn C.') || c_decls == '' // may have no public methods
@@ -217,6 +217,48 @@ fn test_explicit_implements_declaration() {
 	if !found {
 		eprintln('No object with interfaces found in Gio-2.0')
 		eprintln('This is okay if Gio is an older version')
+	}
+}
+
+fn test_void_pointer_arg_maps_to_voidptr() {
+	// GI_TYPE_TAG_VOID (tag=0) on an argument means gpointer, not void.
+	// g_object_set_data(GObject*, key, gpointer) is a reliable case.
+	repo := get_default_repository()
+	repo.require('GObject', '2.0') or {
+		eprintln('Failed to load GObject-2.0: ${err}')
+		assert false
+		return
+	}
+
+	n_infos := repo.get_n_infos('GObject')
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('GObject', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Object' {
+			obj := info.as_object_info()
+			n_methods := obj.get_n_methods()
+			for j in 0 .. int(n_methods) {
+				method := obj.get_method(u32(j)) or { continue }
+				if method.get_name() == 'set_data' {
+					// find the 'data' arg (last arg, gpointer)
+					n_args := method.get_n_args()
+					for k in 0 .. int(n_args) {
+						arg := method.get_arg(u32(k)) or { continue }
+						if arg.get_name() == 'data' {
+							v_type := arg.get_v_type()
+							assert v_type == 'voidptr', 'gpointer arg should map to voidptr, got: ${v_type}'
+						}
+						arg.free()
+					}
+					method.free()
+					obj.free()
+					return
+				}
+				method.free()
+			}
+			obj.free()
+			break
+		}
+		info.free()
 	}
 }
 

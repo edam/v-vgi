@@ -419,3 +419,144 @@ fn set_pointer_property(obj voidptr, prop_name string, val voidptr) {
 		return
 	}
 }
+
+// generate V enum/flags from EnumInfo
+fn generate_enum_binding(info EnumInfo, binding_dir string) {
+	enum_name := info.get_name()
+	file_name := enum_name.to_lower() + '.v'
+	file_path := os.join_path(binding_dir, file_name)
+
+	mut content := 'module ${os.file_name(binding_dir)}\n\n'
+
+	// determine if this is flags or enum based on type
+	info_type := info.get_type()
+	is_flags := info_type == 'flags'
+
+	// generate enum definition
+	content += '@[_allow_multiple_values]\n'
+	if is_flags {
+		content += '@[flag]\n'
+	}
+	content += 'pub enum ${enum_name} {\n'
+
+	// generate enum values
+	n_values := info.get_n_values()
+	for i in 0 .. int(n_values) {
+		value_info := info.get_value(u32(i)) or { continue }
+		value_name := value_info.get_name()
+		value_int := value_info.get_value()
+
+		// convert name to snake_case for V enum convention
+		// e.g., GTK_ALIGN_FILL -> align_fill
+		mut v_name := value_name.to_lower().replace('-', '_')
+
+		// prefix with underscore if name starts with digit
+		if v_name.len > 0 && v_name[0].is_digit() {
+			v_name = '_' + v_name
+		}
+
+		// for flags, don't specify values (V auto-assigns power of 2)
+		// for enums, include explicit values
+		if is_flags {
+			content += '\t${v_name}\n'
+		} else {
+			content += '\t${v_name} = ${value_int}\n'
+		}
+
+		value_info.free()
+	}
+
+	content += '}\n'
+
+	// write file
+	os.write_file(file_path, content) or {
+		eprintln('Failed to write ${file_path}: ${err}')
+		return
+	}
+}
+
+fn generate_c_method_declaration(method FunctionInfo) string {
+	symbol := method.get_symbol()
+	if symbol == '' {
+		return ''
+	}
+
+	// skip private methods
+	method_name := method.get_name()
+	if method_name.starts_with('_') {
+		return ''
+	}
+
+	// build C parameter list
+	mut c_params := ['obj voidptr']
+	n_args := method.get_n_args()
+
+	for j in 0 .. int(n_args) {
+		arg := method.get_arg(u32(j)) or { continue }
+		direction := arg.get_direction()
+
+		if direction == gi_direction_in {
+			arg_name := sanitize_param_name(arg.get_name())
+			arg_type := get_c_type(arg.get_v_type())
+			c_params << '${arg_name} ${arg_type}'
+		}
+
+		arg.free()
+	}
+
+	// add GError parameter if method can throw
+	if method.can_throw_gerror() {
+		c_params << 'error &&C.GError'
+	}
+
+	// get return type
+	return_type_info := method.get_return_type()
+	return_v_type := return_type_info.to_v_type()
+	return_type_info.free()
+
+	skip_return := method.skip_return()
+
+	// generate function signature
+	return_sig := get_c_return_sig(return_v_type, skip_return)
+	return if return_sig.len == 0 {
+		'fn C.${symbol}(${c_params.join(', ')})\n'
+	} else {
+		'fn C.${symbol}(${c_params.join(', ')}) ${return_sig}\n'
+	}
+}
+
+// return the V type for a property that matches the helper function
+fn get_property_v_type(prop PropertyInfo) string {
+	helper := prop.get_property_helper_name()
+	// map helper name to correct V type for the helper function parameter
+	return match helper {
+		'bool', 'int', 'string' { helper }
+		'uint' { 'u32' }
+		'int64' { 'i64' }
+		'uint64' { 'u64' }
+		'float' { 'f32' }
+		'double' { 'f64' }
+		'pointer' { 'voidptr' }
+		else { 'voidptr' }
+	}
+}
+
+fn get_c_type(v_type string) string {
+	return match v_type {
+		'string' { '&char' }
+		'bool' { 'bool' }
+		'void', 'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64', 'u64', 'f32', 'f64' { v_type }
+		'i32' { 'int' }
+		else { 'voidptr' }
+	}
+}
+
+fn get_c_return_sig(v_type string, skip_return bool) string {
+	return if skip_return || v_type == 'void' { '' } else { get_c_type(v_type) }
+}
+
+fn get_v_return_sig(v_type string, can_error bool, skip_return bool) string {
+	error_clause := if can_error { '!' } else { '' }
+	nonvoid_type := if skip_return || v_type == 'void' { '' } else { v_type }
+	return '${error_clause}${nonvoid_type}'
+}

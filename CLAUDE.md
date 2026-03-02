@@ -17,7 +17,9 @@ The module generates V binding code dynamically based on GObject introspection d
   - **gen/util.v**: Utility functions for the module, including `get_vmod_path()` which resolves paths relative to the module directory
   - **gen/compat.c.v**: C interop layer defining libgirepository-2.0 C function bindings and types. Uses `#pkgconfig` to link with girepository.
   - **gen/gi.v**: V wrapper API for GObject introspection, providing `Repository` struct and methods to query typelib metadata
-  - **gen/bind.v**: Binding generation logic that creates V structs, properties, and methods from GObject introspection metadata
+  - **gen/bind.v**: Top-level binding orchestration — iterates namespace entries and delegates to type-specific generators; also generates shared helper files (`compat.c.v`, `v_util.v`, `README.md`) and enum/flags bindings
+  - **gen/bind_obj.v**: Object binding generation — structs, constructors, property accessors, methods, and interface method implementations on objects
+  - **gen/bind_inf.v**: Interface binding generation — V interface types and concrete wrapper structs with method implementations
 - **v.mod**: Module definition declaring the `vgi` module with dependency on `edam.ggetopt`
 
 ### Key Architectural Pattern
@@ -123,7 +125,7 @@ gi.vsh uses the `edam.ggetopt` module for option parsing with a declarative opti
 
 ### Code Generation Context
 
-When working on binding generation (gen/bind.v), remember:
+When working on binding generation (gen/bind*.v files), remember:
 1. Query libgirepository for type information
 2. Map GObject types to V types
 3. Generate valid V syntax for structs, functions, and method bindings
@@ -159,6 +161,9 @@ Generated bindings support cross-namespace inheritance by importing dependency b
   - Good: `// create/empty directory`
   - Bad: `// create or empty the directory`
 - Type names in comments keep their capitalization (e.g., `Repository`, `ObjectInfo`)
+- Function comments do not contain function name and answer question "if I can this function it will..."
+  - Good: `// return an object`
+  - Bad: `// get_object returns an object`
 
 ### Testing
 - **All new functionality must have unit tests**
@@ -168,7 +173,7 @@ Generated bindings support cross-namespace inheritance by importing dependency b
 - Aim for clear, descriptive test names that explain what is being tested
 - **Always run the full test suite after making changes**: `v test .`
 - **Do not run gi.vsh multiple times during testing** - it creates directories and generates many files. Use unit tests instead of repeatedly invoking gi.vsh
-- Focus tests on library code (`gen/bind.v`, `gen/gi.v`, `gen/util.v`) rather than CLI scripts like `gi.vsh` which are primarily glue code
+- Focus tests on library code (`gen/bind.v`, `gen/bind_obj.v`, `gen/bind_inf.v`, `gen/gi.v`, `gen/util.v`) rather than CLI scripts like `gi.vsh` which are primarily glue code
 
 ### Documentation
 - **Keep CLAUDE.md up to date** when making significant changes

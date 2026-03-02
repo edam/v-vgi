@@ -41,6 +41,7 @@ fn C.gi_property_info_get_flags(info &C.GIPropertyInfo) int
 // Type info functions
 fn C.gi_property_info_get_type_info(info &C.GIPropertyInfo) &C.GITypeInfo
 fn C.gi_type_info_get_tag(info &C.GITypeInfo) int
+fn C.gi_type_info_is_pointer(info &C.GITypeInfo) bool
 
 // Function/callable info functions
 fn C.gi_callable_info_get_n_args(info &C.GICallableInfo) u32
