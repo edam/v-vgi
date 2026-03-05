@@ -12,13 +12,11 @@ pub fn get_vmod_path(rel_path string) string {
 // convert parameter names that conflict with V keywords
 pub fn sanitize_param_name(name string) string {
 	return match name {
-		'string', 'type', 'struct', 'enum', 'interface', 'fn', 'const',
-		'import', 'module', 'pub', 'mut', 'shared', 'static', 'volatile',
-		'unsafe', 'return', 'if', 'else', 'for', 'match', 'select',
-		'defer', 'goto', 'break', 'continue', 'in', 'is', 'as', 'or',
-		'and', 'not', 'none', 'true', 'false', 'nil', 'sizeof', 'typeof',
-		'isreftype', 'offsetof', 'dump', 'assert', 'map', 'chan', 'lock',
-		'rlock', 'go', 'spawn', 'asm', '__global', '__offsetof' {
+		'string', 'type', 'struct', 'enum', 'interface', 'fn', 'const', 'import', 'module', 'pub',
+		'mut', 'shared', 'static', 'volatile', 'unsafe', 'return', 'if', 'else', 'for', 'match',
+		'select', 'defer', 'goto', 'break', 'continue', 'in', 'is', 'as', 'or', 'and', 'not',
+		'none', 'true', 'false', 'nil', 'sizeof', 'typeof', 'isreftype', 'offsetof', 'dump',
+		'assert', 'map', 'chan', 'lock', 'rlock', 'go', 'spawn', 'asm', '__global', '__offsetof' {
 			'${name}_'
 		}
 		else {

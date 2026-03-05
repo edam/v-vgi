@@ -14,12 +14,12 @@ The module generates V binding code dynamically based on GObject introspection d
 
 - **gi.vsh**: V script that regenerates bindings for a specified GObject library and version. This is the main code generation tool.
 - **gen/** subdirectory: Contains the code generation logic
-  - **gen/util.v**: Utility functions for the module, including `get_vmod_path()` which resolves paths relative to the module directory
+  - **gen/util.v**: Utility functions — `get_vmod_path()` resolves paths relative to the module root; `sanitize_param_name()` escapes V keywords used as parameter names; `get_binding_dir_name()` converts library name/version to directory name (e.g. `Gtk 4.0` → `gtk_4_0`)
   - **gen/compat.c.v**: C interop layer defining libgirepository-2.0 C function bindings and types. Uses `#pkgconfig` to link with girepository.
   - **gen/gi.v**: V wrapper API for GObject introspection, providing `Repository` struct and methods to query typelib metadata
   - **gen/bind.v**: Top-level binding orchestration — iterates namespace entries and delegates to type-specific generators; also generates shared helper files (`compat.c.v`, `v_util.v`, `README.md`) and enum/flags bindings
   - **gen/bind_obj.v**: Object binding generation — structs, constructors, property accessors, methods, and interface method implementations on objects
-  - **gen/bind_inf.v**: Interface binding generation — V interface types and concrete wrapper structs with method implementations
+  - **gen/bind_inf.v**: Interface binding generation — generates a V interface `IFoo` and a concrete wrapper struct `Foo` (with a `ptr voidptr` field) with method implementations
 - **v.mod**: Module definition declaring the `vgi` module with dependency on `edam.ggetopt`
 
 ### Key Architectural Pattern
@@ -139,9 +139,19 @@ GObject introspection types are mapped to V types:
 - `GI_TYPE_TAG_UINT8/16/32` → `u8/u16/u32`
 - `GI_TYPE_TAG_INT64/UINT64` → `i64/u64`
 - `GI_TYPE_TAG_FLOAT/DOUBLE` → `f32/f64`
+- `GI_TYPE_TAG_GTYPE` → `u64`
 - `GI_TYPE_TAG_UTF8/FILENAME` → `string`
 - `GI_TYPE_TAG_INTERFACE` → `voidptr` (TODO: resolve to actual type)
 - Other complex types → `voidptr` (arrays, lists, etc. not yet implemented)
+
+### Nullable vs Optional Parameters
+
+GI distinguishes two separate parameter annotations:
+
+- **`(nullable)`** / `gi_arg_info_may_be_null()`: NULL is a valid value but the caller must still explicitly pass something. The parameter is required; NULL is just a legal value. Mapped to `?type` in generated bindings.
+- **`(optional)`** / `gi_arg_info_is_optional()`: The parameter can be truly omitted at the binding level. Implemented via a `@[params]` struct in generated bindings.
+
+These are independent flags and can appear in any combination. Nullable args are **not** guaranteed to appear at the end of the parameter list. `gi_arg_info_is_optional()` must be declared in `gen/compat.c.v` to be used.
 
 ### Cross-Namespace Inheritance
 

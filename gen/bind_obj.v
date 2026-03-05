@@ -56,19 +56,11 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 	content += '}\n\n'
 
-	// properties struct
 	content += generate_properties_struct(info, object_name, parent_name, parent_embed)
-
-	// constructor
-	content += generate_constructor(info, object_name)
-
-	// property methods
+	content += generate_object_constructor(info, object_name, parent_name)
+	content += generate_object_set_properties(info, object_name, parent_name)
 	content += generate_property_methods(info, object_name)
-
-	// object methods
 	content += generate_object_methods(info, object_name)
-
-	// interface implementations
 	content += generate_object_interface_implementations(info, object_name)
 
 	os.write_file(file_path, content) or {
@@ -85,6 +77,7 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 	if parent_embed != '' {
 		content += '\t${parent_embed}Properties\n'
 	}
+	content += 'pub:\n'
 
 	// add writable properties only
 	n_props := info.get_n_properties()
@@ -102,8 +95,8 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 		// convert kebab-case to snake_case
 		v_prop_name := prop_name.replace('-', '_')
 
-		// get property type that matches the helper function
-		v_type := get_property_v_type(prop)
+		// property type matches the helper function name
+		v_type := prop.get_property_helper_name()
 
 		content += '\t${v_prop_name} ?${v_type}\n'
 
@@ -115,7 +108,7 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 }
 
 // generate Object.new() constructor
-fn generate_constructor(info ObjectInfo, object_name string) string {
+fn generate_object_constructor(info ObjectInfo, object_name string, parent_name string) string {
 	type_init := info.get_type_init()
 	if type_init == '' {
 		// no type init function, generate stub
@@ -128,6 +121,20 @@ fn generate_constructor(info ObjectInfo, object_name string) string {
 	mut content := 'pub fn ${object_name}.new(properties ${object_name}Properties) &${object_name} {\n'
 	content += '\tobj_ptr := C.g_object_new(C.${type_init}(), unsafe { nil })\n'
 	content += '\tobj := &${object_name}{ptr: unsafe { voidptr(obj_ptr) }}\n'
+
+	// setup parent properties
+	if parent_name != '' {
+		content += '\tobj.${parent_name}.set_properties(properties.${parent_name}Properties)\n'
+	}
+
+	content += '\tobj.set_properties(properties)\n'
+	content += '\treturn obj\n'
+	content += '}\n\n'
+	return content
+}
+
+fn generate_object_set_properties(info ObjectInfo, object_name string, parent_name string) string {
+	mut content := 'pub fn (obj &${object_name}) set_properties(properties ${object_name}Properties) {\n'
 
 	// set each property if provided using property helpers
 	n_props := info.get_n_properties()
@@ -142,16 +149,15 @@ fn generate_constructor(info ObjectInfo, object_name string) string {
 
 		prop_name := prop.get_name()
 		v_prop_name := prop_name.replace('-', '_')
-		helper := prop.get_property_helper_name()
+		v_type := prop.get_property_helper_name()
 
-		content += '\tif val := properties.${v_prop_name} {\n'
-		content += '\t\tset_${helper}_property(obj.ptr, \'${prop_name}\', val)\n'
+		content += '\tif value := properties.${v_prop_name} {\n'
+		content += '\t\tset_${v_type}_property(obj.ptr, \'${prop_name}\', value)\n'
 		content += '\t}\n'
 
 		prop.free()
 	}
 
-	content += '\treturn obj\n'
 	content += '}\n\n'
 	return content
 }
@@ -176,21 +182,20 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 		prop_name := prop.get_name()
 		v_prop_name := prop_name.replace('-', '_')
 
-		// get property type and helper name
-		v_type := prop.get_v_type()
-		helper := prop.get_property_helper_name()
+		// property type matches the helper function name
+		v_type := prop.get_property_helper_name()
 
 		// getter if readable and no method exists
 		if prop.is_readable() && 'get_${v_prop_name}' !in method_names {
 			content += 'pub fn (obj &${object_name}) get_${v_prop_name}() ${v_type} {\n'
-			content += '\treturn get_${helper}_property(obj.ptr, \'${prop_name}\')\n'
+			content += '\treturn get_${v_type}_property(obj.ptr, \'${prop_name}\')\n'
 			content += '}\n\n'
 		}
 
 		// setter if writable and no method exists
 		if prop.is_writable() && 'set_${v_prop_name}' !in method_names {
 			content += 'pub fn (obj &${object_name}) set_${v_prop_name}(value ${v_type}) {\n'
-			content += '\tset_${helper}_property(obj.ptr, \'${prop_name}\', value)\n'
+			content += '\tset_${v_type}_property(obj.ptr, \'${prop_name}\', value)\n'
 			content += '}\n\n'
 		}
 
@@ -276,6 +281,7 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		skip_return := method.skip_return() || return_v_type == 'void'
 		needs_string_conv := return_v_type == 'string'
 		can_throw := method.can_throw_gerror()
+		may_null := method.may_return_null()
 
 		// generate method signature
 		return_sig := get_v_return_sig(return_v_type, can_throw, skip_return)
@@ -293,6 +299,23 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 			content += ')\n'
 			if can_throw {
 				content += '\tv_check_shared_error()!\n'
+			}
+		} else if may_null && needs_string_conv {
+			// null-safe string return
+			if can_throw {
+				content += '\tret_ptr := C.${symbol}(obj.ptr'
+				if call_args.len > 0 {
+					content += ', ${call_args.join(', ')}'
+				}
+				content += ', unsafe { v_get_shared_error() })\n'
+				content += '\tv_check_shared_error()!\n'
+				content += '\treturn v_cstring_or_empty(ret_ptr)\n'
+			} else {
+				content += '\treturn v_cstring_or_empty(C.${symbol}(obj.ptr'
+				if call_args.len > 0 {
+					content += ', ${call_args.join(', ')}'
+				}
+				content += '))\n'
 			}
 		} else {
 			// typed return
@@ -437,6 +460,7 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 			skip_return := method.skip_return() || return_v_type == 'void'
 			needs_string_conv := return_v_type == 'string'
 			can_throw := method.can_throw_gerror()
+			may_null := method.may_return_null()
 
 			// generate method signature
 			return_sig := get_v_return_sig(return_v_type, can_throw, skip_return)
@@ -454,6 +478,23 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 				content += ')\n'
 				if can_throw {
 					content += '\tv_check_shared_error()!\n'
+				}
+			} else if may_null && needs_string_conv {
+				// null-safe string return
+				if can_throw {
+					content += '\tret_ptr := C.${symbol}(obj.ptr'
+					if call_args.len > 0 {
+						content += ', ${call_args.join(', ')}'
+					}
+					content += ', unsafe { v_get_shared_error() })\n'
+					content += '\tv_check_shared_error()!\n'
+					content += '\treturn v_cstring_or_empty(ret_ptr)\n'
+				} else {
+					content += '\treturn v_cstring_or_empty(C.${symbol}(obj.ptr'
+					if call_args.len > 0 {
+						content += ', ${call_args.join(', ')}'
+					}
+					content += '))\n'
 				}
 			} else {
 				// typed return

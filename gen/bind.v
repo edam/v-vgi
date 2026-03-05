@@ -178,6 +178,10 @@ pub:
 
 fn C.g_value_get_boolean(value voidptr) bool
 fn C.g_value_set_boolean(value voidptr, v_boolean bool)
+fn C.g_value_get_schar(value voidptr) i8
+fn C.g_value_set_schar(value voidptr, v_schar i8)
+fn C.g_value_get_uchar(value voidptr) u8
+fn C.g_value_set_uchar(value voidptr, v_uchar u8)
 fn C.g_value_get_int(value voidptr) int
 fn C.g_value_set_int(value voidptr, v_int int)
 fn C.g_value_get_uint(value voidptr) u32
@@ -195,15 +199,6 @@ fn C.g_value_set_string(value voidptr, v_string &char)
 fn C.g_value_get_pointer(value voidptr) voidptr
 fn C.g_value_set_pointer(value voidptr, v_pointer voidptr)
 
-fn C.g_type_boolean() u64
-fn C.g_type_int() u64
-fn C.g_type_uint() u64
-fn C.g_type_int64() u64
-fn C.g_type_uint64() u64
-fn C.g_type_float() u64
-fn C.g_type_double() u64
-fn C.g_type_string() u64
-fn C.g_type_pointer() u64
 '
 
 	os.write_file(compat_path, content) or {
@@ -253,164 +248,217 @@ fn v_check_shared_error_or_return[T](value T) !T {
 	return value
 }
 
+// convert a nullable C string to a V string, returning empty string for nil
+fn v_cstring_or_empty(s &char) string {
+	if s == unsafe { nil } { return \'\' }
+	return unsafe { cstring_to_vstring(s) }
+}
+
 // GValue is a C struct we need to allocate. size based on GValue definition (24 bytes on most systems)
 struct GValueBuffer {
 	data [24]u8
 }
 
+// GLib fundamental type IDs (G_TYPE_MAKE_FUNDAMENTAL(n) = n << 2, stable GLib ABI)
+const g_type_char_id = u64(12)
+const g_type_uchar_id = u64(16)
+const g_type_boolean_id = u64(20)
+const g_type_int_id = u64(24)
+const g_type_uint_id = u64(28)
+const g_type_int64_id = u64(40)
+const g_type_uint64_id = u64(44)
+const g_type_float_id = u64(56)
+const g_type_double_id = u64(60)
+const g_type_string_id = u64(64)
+const g_type_pointer_id = u64(68)
+
 // helper functions for property access
 
 fn get_bool_property(obj voidptr, prop_name string) bool {
 	mut value := GValueBuffer{}
-	C.g_value_init(&value, C.g_type_boolean())
-	C.g_object_get_property(obj, prop_name.str, &value)
-	result := C.g_value_get_boolean(&value)
-	C.g_value_unset(&value)
+	C.g_value_init(voidptr(&value), g_type_boolean_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_boolean(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
 	return result
 }
 
 fn set_bool_property(obj voidptr, prop_name string, val bool) {
 	mut gvalue := GValueBuffer{}
-	C.g_value_init(&gvalue, C.g_type_boolean())
-	C.g_value_set_boolean(&gvalue, val)
-	C.g_object_set_property(obj, prop_name.str, &gvalue)
-	C.g_value_unset(&gvalue)
+	C.g_value_init(voidptr(&gvalue), g_type_boolean_id)
+	C.g_value_set_boolean(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
+}
+
+fn get_i8_property(obj voidptr, prop_name string) i8 {
+	mut value := GValueBuffer{}
+	C.g_value_init(voidptr(&value), g_type_char_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_schar(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
+	return result
+}
+
+fn set_i8_property(obj voidptr, prop_name string, val i8) {
+	mut gvalue := GValueBuffer{}
+	C.g_value_init(voidptr(&gvalue), g_type_char_id)
+	C.g_value_set_schar(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
+}
+
+fn get_u8_property(obj voidptr, prop_name string) u8 {
+	mut value := GValueBuffer{}
+	C.g_value_init(voidptr(&value), g_type_uchar_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_uchar(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
+	return result
+}
+
+fn set_u8_property(obj voidptr, prop_name string, val u8) {
+	mut gvalue := GValueBuffer{}
+	C.g_value_init(voidptr(&gvalue), g_type_uchar_id)
+	C.g_value_set_uchar(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
 }
 
 fn get_int_property(obj voidptr, prop_name string) int {
 	mut value := GValueBuffer{}
-	C.g_value_init(&value, C.g_type_int())
-	C.g_object_get_property(obj, prop_name.str, &value)
-	result := C.g_value_get_int(&value)
-	C.g_value_unset(&value)
+	C.g_value_init(voidptr(&value), g_type_int_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_int(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
 	return result
 }
 
 fn set_int_property(obj voidptr, prop_name string, val int) {
 	mut gvalue := GValueBuffer{}
-	C.g_value_init(&gvalue, C.g_type_int())
-	C.g_value_set_int(&gvalue, val)
-	C.g_object_set_property(obj, prop_name.str, &gvalue)
-	C.g_value_unset(&gvalue)
+	C.g_value_init(voidptr(&gvalue), g_type_int_id)
+	C.g_value_set_int(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_uint_property(obj voidptr, prop_name string) u32 {
+fn get_u32_property(obj voidptr, prop_name string) u32 {
 	mut value := GValueBuffer{}
-	C.g_value_init(&value, C.g_type_uint())
-	C.g_object_get_property(obj, prop_name.str, &value)
-	result := C.g_value_get_uint(&value)
-	C.g_value_unset(&value)
+	C.g_value_init(voidptr(&value), g_type_uint_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_uint(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
 	return result
 }
 
-fn set_uint_property(obj voidptr, prop_name string, val u32) {
+fn set_u32_property(obj voidptr, prop_name string, val u32) {
 	mut gvalue := GValueBuffer{}
-	C.g_value_init(&gvalue, C.g_type_uint())
-	C.g_value_set_uint(&gvalue, val)
-	C.g_object_set_property(obj, prop_name.str, &gvalue)
-	C.g_value_unset(&gvalue)
+	C.g_value_init(voidptr(&gvalue), g_type_uint_id)
+	C.g_value_set_uint(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_int64_property(obj voidptr, prop_name string) i64 {
+fn get_i64_property(obj voidptr, prop_name string) i64 {
 	mut value := GValueBuffer{}
-	C.g_value_init(&value, C.g_type_int64())
-	C.g_object_get_property(obj, prop_name.str, &value)
-	result := C.g_value_get_int64(&value)
-	C.g_value_unset(&value)
+	C.g_value_init(voidptr(&value), g_type_int64_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_int64(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
 	return result
 }
 
-fn set_int64_property(obj voidptr, prop_name string, val i64) {
+fn set_i64_property(obj voidptr, prop_name string, val i64) {
 	mut gvalue := GValueBuffer{}
-	C.g_value_init(&gvalue, C.g_type_int64())
-	C.g_value_set_int64(&gvalue, val)
-	C.g_object_set_property(obj, prop_name.str, &gvalue)
-	C.g_value_unset(&gvalue)
+	C.g_value_init(voidptr(&gvalue), g_type_int64_id)
+	C.g_value_set_int64(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_uint64_property(obj voidptr, prop_name string) u64 {
+fn get_u64_property(obj voidptr, prop_name string) u64 {
 	mut value := GValueBuffer{}
-	C.g_value_init(&value, C.g_type_uint64())
-	C.g_object_get_property(obj, prop_name.str, &value)
-	result := C.g_value_get_uint64(&value)
-	C.g_value_unset(&value)
+	C.g_value_init(voidptr(&value), g_type_uint64_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_uint64(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
 	return result
 }
 
-fn set_uint64_property(obj voidptr, prop_name string, val u64) {
+fn set_u64_property(obj voidptr, prop_name string, val u64) {
 	mut gvalue := GValueBuffer{}
-	C.g_value_init(&gvalue, C.g_type_uint64())
-	C.g_value_set_uint64(&gvalue, val)
-	C.g_object_set_property(obj, prop_name.str, &gvalue)
-	C.g_value_unset(&gvalue)
+	C.g_value_init(voidptr(&gvalue), g_type_uint64_id)
+	C.g_value_set_uint64(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_float_property(obj voidptr, prop_name string) f32 {
+fn get_f32_property(obj voidptr, prop_name string) f32 {
 	mut value := GValueBuffer{}
-	C.g_value_init(&value, C.g_type_float())
-	C.g_object_get_property(obj, prop_name.str, &value)
-	result := C.g_value_get_float(&value)
-	C.g_value_unset(&value)
+	C.g_value_init(voidptr(&value), g_type_float_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_float(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
 	return result
 }
 
-fn set_float_property(obj voidptr, prop_name string, val f32) {
+fn set_f32_property(obj voidptr, prop_name string, val f32) {
 	mut gvalue := GValueBuffer{}
-	C.g_value_init(&gvalue, C.g_type_float())
-	C.g_value_set_float(&gvalue, val)
-	C.g_object_set_property(obj, prop_name.str, &gvalue)
-	C.g_value_unset(&gvalue)
+	C.g_value_init(voidptr(&gvalue), g_type_float_id)
+	C.g_value_set_float(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_double_property(obj voidptr, prop_name string) f64 {
+fn get_f64_property(obj voidptr, prop_name string) f64 {
 	mut value := GValueBuffer{}
-	C.g_value_init(&value, C.g_type_double())
-	C.g_object_get_property(obj, prop_name.str, &value)
-	result := C.g_value_get_double(&value)
-	C.g_value_unset(&value)
+	C.g_value_init(voidptr(&value), g_type_double_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_double(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
 	return result
 }
 
-fn set_double_property(obj voidptr, prop_name string, val f64) {
+fn set_f64_property(obj voidptr, prop_name string, val f64) {
 	mut gvalue := GValueBuffer{}
-	C.g_value_init(&gvalue, C.g_type_double())
-	C.g_value_set_double(&gvalue, val)
-	C.g_object_set_property(obj, prop_name.str, &gvalue)
-	C.g_value_unset(&gvalue)
+	C.g_value_init(voidptr(&gvalue), g_type_double_id)
+	C.g_value_set_double(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
 }
 
 fn get_string_property(obj voidptr, prop_name string) string {
 	mut value := GValueBuffer{}
-	C.g_value_init(&value, C.g_type_string())
-	C.g_object_get_property(obj, prop_name.str, &value)
-	result := unsafe { cstring_to_vstring(C.g_value_get_string(&value)) }
-	C.g_value_unset(&value)
+	C.g_value_init(voidptr(&value), g_type_string_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := unsafe { cstring_to_vstring(C.g_value_get_string(voidptr(&value))) }
+	C.g_value_unset(voidptr(&value))
 	return result
 }
 
 fn set_string_property(obj voidptr, prop_name string, val string) {
 	mut gvalue := GValueBuffer{}
-	C.g_value_init(&gvalue, C.g_type_string())
-	C.g_value_set_string(&gvalue, val.str)
-	C.g_object_set_property(obj, prop_name.str, &gvalue)
-	C.g_value_unset(&gvalue)
+	C.g_value_init(voidptr(&gvalue), g_type_string_id)
+	C.g_value_set_string(voidptr(&gvalue), val.str)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_pointer_property(obj voidptr, prop_name string) voidptr {
+fn get_voidptr_property(obj voidptr, prop_name string) voidptr {
 	mut value := GValueBuffer{}
-	C.g_value_init(&value, C.g_type_pointer())
-	C.g_object_get_property(obj, prop_name.str, &value)
-	result := C.g_value_get_pointer(&value)
-	C.g_value_unset(&value)
+	C.g_value_init(voidptr(&value), g_type_pointer_id)
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_pointer(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
 	return result
 }
 
-fn set_pointer_property(obj voidptr, prop_name string, val voidptr) {
+fn set_voidptr_property(obj voidptr, prop_name string, val voidptr) {
 	mut gvalue := GValueBuffer{}
-	C.g_value_init(&gvalue, C.g_type_pointer())
-	C.g_value_set_pointer(&gvalue, val)
-	C.g_object_set_property(obj, prop_name.str, &gvalue)
-	C.g_value_unset(&gvalue)
+	C.g_value_init(voidptr(&gvalue), g_type_pointer_id)
+	C.g_value_set_pointer(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
 }
 '
 
@@ -525,21 +573,6 @@ fn generate_c_method_declaration(method FunctionInfo) string {
 	}
 }
 
-// return the V type for a property that matches the helper function
-fn get_property_v_type(prop PropertyInfo) string {
-	helper := prop.get_property_helper_name()
-	// map helper name to correct V type for the helper function parameter
-	return match helper {
-		'bool', 'int', 'string' { helper }
-		'uint' { 'u32' }
-		'int64' { 'i64' }
-		'uint64' { 'u64' }
-		'float' { 'f32' }
-		'double' { 'f64' }
-		'pointer' { 'voidptr' }
-		else { 'voidptr' }
-	}
-}
 
 fn get_c_type(v_type string) string {
 	return match v_type {

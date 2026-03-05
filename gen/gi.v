@@ -548,13 +548,15 @@ pub fn (info TypeInfo) to_property_helper_name() string {
 	tag := info.get_tag()
 	return match tag {
 		gi_type_tag_boolean { 'bool' }
-		gi_type_tag_int8, gi_type_tag_int16, gi_type_tag_int32 { 'int' }
-		gi_type_tag_uint8, gi_type_tag_uint16, gi_type_tag_uint32 { 'uint' }
-		gi_type_tag_int64 { 'int64' }
-		gi_type_tag_uint64, gi_type_tag_gtype { 'uint64' }
-		gi_type_tag_float { 'float' }
-		gi_type_tag_double { 'double' }
+		gi_type_tag_int8 { 'i8' }
+		gi_type_tag_uint8 { 'u8' }
+		gi_type_tag_int16, gi_type_tag_int32 { 'int' }
+		gi_type_tag_uint16, gi_type_tag_uint32 { 'u32' }
+		gi_type_tag_int64 { 'i64' }
+		gi_type_tag_uint64, gi_type_tag_gtype { 'u64' }
+		gi_type_tag_float { 'f32' }
+		gi_type_tag_double { 'f64' }
 		gi_type_tag_utf8, gi_type_tag_filename { 'string' }
-		else { 'pointer' }
+		else { 'voidptr' }
 	}
 }

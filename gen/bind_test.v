@@ -43,7 +43,7 @@ fn test_generate_object_methods() {
 	obj.free()
 }
 
-fn test_generate_constructor() {
+fn test_generate_object_constructor() {
 	repo := get_default_repository()
 	repo.require('GObject', '2.0') or {
 		eprintln('Failed to load GObject-2.0: ${err}')
@@ -69,7 +69,7 @@ fn test_generate_constructor() {
 	obj := object_info or { panic('unreachable') }
 
 	// generate constructor
-	content := generate_constructor(obj, 'TestObject')
+	content := generate_object_constructor(obj, 'TestObject', 'ParentObject')
 
 	// verify constructor signature
 	assert content.contains('pub fn TestObject.new(properties TestObjectProperties)')
@@ -260,6 +260,335 @@ fn test_void_pointer_arg_maps_to_voidptr() {
 		}
 		info.free()
 	}
+}
+
+fn test_generate_properties_struct_no_props() {
+	// GObject.Object has no writable properties - struct should still be well-formed
+	repo := get_default_repository()
+	repo.require('GObject', '2.0') or {
+		eprintln('Failed to load GObject-2.0: ${err}')
+		assert false
+		return
+	}
+
+	n_infos := repo.get_n_infos('GObject')
+	mut object_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('GObject', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Object' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	assert object_info != none
+	obj := object_info or { panic('unreachable') }
+
+	content := generate_properties_struct(obj, 'Object', '', '')
+
+	assert content.contains('@[params]')
+	assert content.contains('pub struct ObjectProperties {')
+	assert content.contains('pub:')
+	assert content.contains('}\n')
+
+	obj.free()
+}
+
+fn test_generate_properties_struct_with_parent() {
+	// test that parent_embed value is embedded in the properties struct
+	repo := get_default_repository()
+	repo.require('GObject', '2.0') or {
+		eprintln('Failed to load GObject-2.0: ${err}')
+		assert false
+		return
+	}
+
+	n_infos := repo.get_n_infos('GObject')
+	mut object_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('GObject', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Object' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	assert object_info != none
+	obj := object_info or { panic('unreachable') }
+
+	content := generate_properties_struct(obj, 'ChildObject', 'Object', 'Object')
+
+	assert content.contains('pub struct ChildObjectProperties {')
+	assert content.contains('\tObjectProperties')
+
+	obj.free()
+}
+
+fn test_generate_properties_struct_writable_props() {
+	// Gio.Application has writable properties - they should appear as optional fields
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	n_infos := repo.get_n_infos('Gio')
+	mut object_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Application' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	app := object_info or {
+		eprintln('Gio.Application not found, skipping')
+		return
+	}
+
+	n_props := app.get_n_properties()
+	mut has_writable := false
+	for i in 0 .. int(n_props) {
+		prop := app.get_property(u32(i)) or { continue }
+		if prop.is_writable() {
+			has_writable = true
+		}
+		prop.free()
+		if has_writable {
+			break
+		}
+	}
+
+	if !has_writable {
+		eprintln('Gio.Application has no writable properties, skipping')
+		app.free()
+		return
+	}
+
+	content := generate_properties_struct(app, 'Application', '', '')
+
+	assert content.contains('@[params]')
+	assert content.contains('pub struct ApplicationProperties {')
+	// writable props are declared as optional types
+	assert content.contains(' ?')
+
+	app.free()
+}
+
+fn test_generate_object_set_properties_no_props() {
+	// GObject.Object has no writable props - method body should be empty
+	repo := get_default_repository()
+	repo.require('GObject', '2.0') or {
+		eprintln('Failed to load GObject-2.0: ${err}')
+		assert false
+		return
+	}
+
+	n_infos := repo.get_n_infos('GObject')
+	mut object_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('GObject', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Object' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	assert object_info != none
+	obj := object_info or { panic('unreachable') }
+
+	content := generate_object_set_properties(obj, 'Object', '')
+
+	assert content.contains('pub fn (obj &Object) set_properties(properties ObjectProperties)')
+	assert content.contains('}\n')
+	// no property assignments
+	assert !content.contains('if value :=')
+
+	obj.free()
+}
+
+fn test_generate_object_set_properties_with_props() {
+	// Gio.Application has writable properties - set_properties should call typed helpers
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	n_infos := repo.get_n_infos('Gio')
+	mut object_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Application' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	app := object_info or {
+		eprintln('Gio.Application not found, skipping')
+		return
+	}
+
+	n_props := app.get_n_properties()
+	mut has_writable := false
+	for i in 0 .. int(n_props) {
+		prop := app.get_property(u32(i)) or { continue }
+		if prop.is_writable() {
+			has_writable = true
+		}
+		prop.free()
+		if has_writable {
+			break
+		}
+	}
+
+	if !has_writable {
+		eprintln('Gio.Application has no writable properties, skipping')
+		app.free()
+		return
+	}
+
+	content := generate_object_set_properties(app, 'Application', '')
+
+	assert content.contains('pub fn (obj &Application) set_properties(properties ApplicationProperties)')
+	assert content.contains('if value := properties.')
+	assert content.contains('_property(obj.ptr,')
+
+	app.free()
+}
+
+fn test_generate_property_methods_no_props() {
+	// GObject.Object has no properties - should return empty string
+	repo := get_default_repository()
+	repo.require('GObject', '2.0') or {
+		eprintln('Failed to load GObject-2.0: ${err}')
+		assert false
+		return
+	}
+
+	n_infos := repo.get_n_infos('GObject')
+	mut object_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('GObject', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Object' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	assert object_info != none
+	obj := object_info or { panic('unreachable') }
+
+	content := generate_property_methods(obj, 'Object')
+
+	assert content == ''
+
+	obj.free()
+}
+
+fn test_generate_property_methods_with_props() {
+	// Gio.Application has readable/writable properties - getters/setters should be generated
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	n_infos := repo.get_n_infos('Gio')
+	mut object_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Application' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	app := object_info or {
+		eprintln('Gio.Application not found, skipping')
+		return
+	}
+
+	n_props := app.get_n_properties()
+	if n_props == 0 {
+		eprintln('Gio.Application has no properties, skipping')
+		app.free()
+		return
+	}
+
+	content := generate_property_methods(app, 'Application')
+
+	// property accessors are only generated when no explicit method already exists;
+	// Gio.Application has explicit get_/set_ methods for all its properties, so
+	// content may be empty — verify that any generated methods are well-formed
+	if content.len > 0 {
+		assert content.contains('pub fn (obj &Application) get_')
+			|| content.contains('pub fn (obj &Application) set_')
+		assert content.contains('_property(obj.ptr,')
+	}
+
+	app.free()
+}
+
+fn test_generate_object_binding_creates_file() {
+	// generate a complete object binding file and verify structure
+	repo := get_default_repository()
+	repo.require('GObject', '2.0') or {
+		eprintln('Failed to load GObject-2.0: ${err}')
+		assert false
+		return
+	}
+
+	n_infos := repo.get_n_infos('GObject')
+	mut object_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('GObject', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Object' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	assert object_info != none
+	obj := object_info or { panic('unreachable') }
+
+	test_dir := os.join_path(os.temp_dir(), 'vgi_obj_binding_test')
+	os.mkdir_all(test_dir) or {}
+	defer {
+		os.rmdir_all(test_dir) or {}
+	}
+
+	generate_object_binding(obj, test_dir)
+
+	file_path := os.join_path(test_dir, 'object.v')
+	assert os.exists(file_path)
+
+	content := os.read_file(file_path) or {
+		eprintln('Failed to read generated file: ${err}')
+		assert false
+		return
+	}
+
+	assert content.contains('module ')
+	assert content.contains('pub struct Object {')
+	assert content.contains('pub struct ObjectProperties {')
+	assert content.contains('pub fn Object.new(')
+	assert content.contains('pub fn (obj &Object) set_properties(')
+
+	obj.free()
 }
 
 fn test_generate_enum() {

@@ -150,6 +150,7 @@ fn generate_interface_methods(info InterfaceInfo, interface_name string) string 
 		skip_return := method.skip_return() || return_v_type == 'void'
 		needs_string_conv := return_v_type == 'string'
 		can_throw := method.can_throw_gerror()
+		may_null := method.may_return_null()
 
 		// generate method signature
 		return_sig := get_v_return_sig(return_v_type, can_throw, skip_return)
@@ -167,6 +168,23 @@ fn generate_interface_methods(info InterfaceInfo, interface_name string) string 
 			content += ')\n'
 			if can_throw {
 				content += '\tv_check_shared_error()!\n'
+			}
+		} else if may_null && needs_string_conv {
+			// null-safe string return
+			if can_throw {
+				content += '\tret_ptr := C.${symbol}(obj.ptr'
+				if call_args.len > 0 {
+					content += ', ${call_args.join(', ')}'
+				}
+				content += ', unsafe { v_get_shared_error() })\n'
+				content += '\tv_check_shared_error()!\n'
+				content += '\treturn v_cstring_or_empty(ret_ptr)\n'
+			} else {
+				content += '\treturn v_cstring_or_empty(C.${symbol}(obj.ptr'
+				if call_args.len > 0 {
+					content += ', ${call_args.join(', ')}'
+				}
+				content += '))\n'
 			}
 		} else {
 			// typed return
