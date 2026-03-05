@@ -35,6 +35,10 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 		}
 	}
 
+	if object_needs_os_import(info) {
+		content += '\nimport os\n'
+	}
+
 	content += '\n'
 
 	// generate C function declarations
@@ -249,6 +253,16 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		// convert kebab-case to snake_case
 		v_method_name := method_name.replace('-', '_')
 
+		// special case: g_application_run - auto-inject os.args
+		if symbol == 'g_application_run' {
+			content += 'pub fn (obj &${object_name}) ${v_method_name}() int {\n'
+			content += '\targs_c := os.args.map(it.str)\n'
+			content += '\treturn C.${symbol}(obj.ptr, os.args.len, voidptr(args_c.data))\n'
+			content += '}\n\n'
+			method.free()
+			continue
+		}
+
 		// build parameter list and call args
 		mut params := []string{}
 		mut call_args := []string{}
@@ -355,6 +369,20 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 	}
 
 	return content
+}
+
+// return true if any method requires import os in the generated binding
+fn object_needs_os_import(info ObjectInfo) bool {
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		symbol := method.get_symbol()
+		method.free()
+		if symbol == 'g_application_run' {
+			return true
+		}
+	}
+	return false
 }
 
 // generate interface method implementations on an object

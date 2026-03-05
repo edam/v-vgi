@@ -591,6 +591,43 @@ fn test_generate_object_binding_creates_file() {
 	obj.free()
 }
 
+fn test_application_run_special_case() {
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		eprintln('This test requires Gio-2.0 to be installed')
+		return
+	}
+
+	n_infos := repo.get_n_infos('Gio')
+	mut app_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Application' {
+			app_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	app := app_info or {
+		eprintln('Gio.Application not found, skipping')
+		return
+	}
+
+	content := generate_object_methods(app, 'Application')
+
+	// run() should take no parameters and inject os.args
+	assert content.contains('pub fn (obj &Application) run() int {')
+	assert content.contains('args_c := os.args.map(it.str)')
+	assert content.contains('C.g_application_run(obj.ptr, os.args.len, voidptr(args_c.data))')
+
+	// os import should be detected
+	assert object_needs_os_import(app)
+
+	app.free()
+}
+
 fn test_generate_enum() {
 	repo := get_default_repository()
 	repo.require('Gio', '2.0') or {
