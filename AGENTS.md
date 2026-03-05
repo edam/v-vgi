@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI when working with code in this repository.
 
 ## Project Overview
 
@@ -186,7 +186,13 @@ Generated bindings support cross-namespace inheritance by importing dependency b
 - Focus tests on library code (`gen/bind.v`, `gen/bind_obj.v`, `gen/bind_inf.v`, `gen/gi.v`, `gen/util.v`) rather than CLI scripts like `gi.vsh` which are primarily glue code
 
 ### Documentation
-- **Keep CLAUDE.md up to date** when making significant changes
+- **Keep AGENTS.md up to date** when making significant changes
 - Add new commands to the "Common Commands" section
 - Document new architectural patterns or components
 - Update coding style guidelines if new conventions are established
+
+## General Instructions
+
+These MUST be followed at all times:
+
+* Do not `git commit`. Make changes only.
