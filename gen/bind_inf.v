@@ -55,11 +55,11 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 		return_type_info.free()
 
 		skip_return := method.skip_return() || return_v_type == 'void'
-		// needs_string_conv := return_v_type == 'string'
 		can_throw := method.can_throw_gerror()
+		may_null := method.may_return_null()
 
 		// generate method signature
-		return_sig := get_v_return_sig(return_v_type, can_throw, skip_return)
+		return_sig := get_v_return_sig(return_v_type, can_throw, may_null, skip_return)
 		content += '\t${v_method_name}(${param_list}) ${return_sig}\n'
 
 		method.free()
@@ -148,76 +148,14 @@ fn generate_interface_methods(info InterfaceInfo, interface_name string) string 
 		return_type_info.free()
 
 		skip_return := method.skip_return() || return_v_type == 'void'
-		needs_string_conv := return_v_type == 'string'
 		can_throw := method.can_throw_gerror()
 		may_null := method.may_return_null()
 
 		// generate method signature
-		return_sig := get_v_return_sig(return_v_type, can_throw, skip_return)
+		return_sig := get_v_return_sig(return_v_type, can_throw, may_null, skip_return)
 		content += 'pub fn (obj &${interface_name}) ${v_method_name}(${param_list}) ${return_sig} {\n'
-
-		if skip_return {
-			// void return
-			content += '\tC.${symbol}(obj.ptr'
-			if call_args.len > 0 {
-				content += ', ${call_args.join(', ')}'
-			}
-			if can_throw {
-				content += ', unsafe { v_get_shared_error() }'
-			}
-			content += ')\n'
-			if can_throw {
-				content += '\tv_check_shared_error()!\n'
-			}
-		} else if may_null && needs_string_conv {
-			// null-safe string return
-			if can_throw {
-				content += '\tret_ptr := C.${symbol}(obj.ptr'
-				if call_args.len > 0 {
-					content += ', ${call_args.join(', ')}'
-				}
-				content += ', unsafe { v_get_shared_error() })\n'
-				content += '\tv_check_shared_error()!\n'
-				content += '\treturn v_cstring_or_empty(ret_ptr)\n'
-			} else {
-				content += '\treturn v_cstring_or_empty(C.${symbol}(obj.ptr'
-				if call_args.len > 0 {
-					content += ', ${call_args.join(', ')}'
-				}
-				content += '))\n'
-			}
-		} else {
-			// typed return
-			if can_throw {
-				content += '\tv_result := '
-			} else {
-				content += '\treturn '
-			}
-			if needs_string_conv {
-				content += 'unsafe { cstring_to_vstring(C.${symbol}(obj.ptr'
-			} else {
-				content += 'C.${symbol}(obj.ptr'
-			}
-			if call_args.len > 0 {
-				content += ', ${call_args.join(', ')}'
-			}
-			if can_throw {
-				// don't wrap in unsafe if already in unsafe block
-				if needs_string_conv {
-					content += ', v_get_shared_error()'
-				} else {
-					content += ', unsafe { v_get_shared_error() }'
-				}
-			}
-			if needs_string_conv {
-				content += ')) }\n'
-			} else {
-				content += ')\n'
-			}
-			if can_throw {
-				content += '\treturn v_check_shared_error_or_return(v_result)\n'
-			}
-		}
+		content += generate_method_body(symbol, 'obj.ptr', call_args, return_v_type, can_throw,
+			may_null, skip_return)
 		content += '}\n\n'
 
 		method.free()

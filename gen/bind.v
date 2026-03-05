@@ -588,8 +588,91 @@ fn get_c_return_sig(v_type string, skip_return bool) string {
 	return if skip_return || v_type == 'void' { '' } else { get_c_type(v_type) }
 }
 
-fn get_v_return_sig(v_type string, can_error bool, skip_return bool) string {
-	error_clause := if can_error { '!' } else { '' }
-	nonvoid_type := if skip_return || v_type == 'void' { '' } else { v_type }
-	return '${error_clause}${nonvoid_type}'
+fn get_v_return_sig(v_type string, can_error bool, may_null bool, skip_return bool) string {
+	if skip_return || v_type == 'void' {
+		return if can_error { '!' } else { '' }
+	}
+	is_nullable_type := v_type == 'string' || v_type == 'voidptr' || v_type.starts_with('&')
+	// V does not support !?T — when both can_error and may_null, use !T (nil treated as error)
+	if may_null && is_nullable_type && !can_error {
+		return '?${v_type}'
+	}
+	return if can_error { '!${v_type}' } else { v_type }
+}
+
+// generate the body of a method binding (from C call to return statement)
+fn generate_method_body(symbol string, receiver string, call_args []string, return_v_type string, can_throw bool, may_null bool, skip_return bool) string {
+	needs_string_conv := return_v_type == 'string'
+	is_nullable_type := return_v_type == 'string' || return_v_type == 'voidptr'
+		|| return_v_type.starts_with('&')
+	effective_may_null := may_null && is_nullable_type
+	mut content := ''
+
+	if skip_return {
+		content += '\tC.${symbol}(${receiver}'
+		if call_args.len > 0 {
+			content += ', ${call_args.join(', ')}'
+		}
+		if can_throw {
+			content += ', unsafe { v_get_shared_error() }'
+		}
+		content += ')\n'
+		if can_throw {
+			content += '\tv_check_shared_error()!\n'
+		}
+	} else if effective_may_null {
+		// nullable return — capture result and check for nil
+		content += '\tv_result := C.${symbol}(${receiver}'
+		if call_args.len > 0 {
+			content += ', ${call_args.join(', ')}'
+		}
+		if can_throw {
+			content += ', unsafe { v_get_shared_error() }'
+		}
+		content += ')\n'
+		if can_throw {
+			// !T: check error first, then treat nil as error (V doesn't support !?T)
+			content += '\tv_check_shared_error()!\n'
+			content += '\tif v_result == unsafe { nil } { return error(\'${symbol} returned null\') }\n'
+		} else {
+			// ?T: return none for nil
+			content += '\tif v_result == unsafe { nil } { return none }\n'
+		}
+		if needs_string_conv {
+			content += '\treturn unsafe { cstring_to_vstring(v_result) }\n'
+		} else {
+			content += '\treturn v_result\n'
+		}
+	} else {
+		// non-nullable typed return
+		if can_throw {
+			content += '\tv_result := '
+		} else {
+			content += '\treturn '
+		}
+		if needs_string_conv {
+			content += 'unsafe { cstring_to_vstring(C.${symbol}(${receiver}'
+		} else {
+			content += 'C.${symbol}(${receiver}'
+		}
+		if call_args.len > 0 {
+			content += ', ${call_args.join(', ')}'
+		}
+		if can_throw {
+			if needs_string_conv {
+				content += ', v_get_shared_error()'
+			} else {
+				content += ', unsafe { v_get_shared_error() }'
+			}
+		}
+		if needs_string_conv {
+			content += ')) }\n'
+		} else {
+			content += ')\n'
+		}
+		if can_throw {
+			content += '\treturn v_check_shared_error_or_return(v_result)\n'
+		}
+	}
+	return content
 }

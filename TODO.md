@@ -50,7 +50,7 @@ Still missing full generation:
 
 ## Nullable Types
 
-- `may_return_null()` queried but **not used** — returns always non-optional (e.g., `string` not `?string`).
+- Return nullability implemented: `may_return_null()` → `?T` (no-throw) or `!T` with nil-as-error (throwing). V does not support `!?T`.
 - Parameter nullability (`may_be_null()`) ignored — no `?type` for params.
 - `gi_arg_info_is_optional()` not declared/used in compat.c.v.
 
@@ -84,7 +84,7 @@ Still missing full generation:
 1. DONE - Interface type resolution - Parent interfaces embedded; methods implemented on objects.
 2. DONE - Enums and flags - Generated with proper V syntax (@[flag] for flags).
 3. DONE - GError handling - Shared error via `v_check_shared_error()`; ! returns for throwers.
-4. **Nullable return types** - `may_return_null()` ignored; generate `?Type` for optionals (e.g., many GTK returns).
+4. DONE - **Nullable return types** - `may_return_null()` → `?T` (no-throw) or `!T` with nil-as-error (throwing).
 5. **Constructor functions** - Only generic; add specific ctors as distinguished methods.
 6. **Out parameters** - Common in APIs; handle as mut refs or out structs.
 
