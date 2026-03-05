@@ -2,118 +2,111 @@
 
 ## Test Coverage
 
-Unit tests live in `gen/*_test.v`. Functions without direct tests:
+Unit tests live in `gen/*_test.v`. With PKG_CONFIG_PATH set, all tests pass (4 files: util_test.v, bind_test.v, gi_test.v, int_test.v).
 
-### bind_obj.v — covered
-- `generate_object_constructor` — `test_generate_object_constructor`
-- `generate_object_c_method_declarations` — `test_generate_object_methods`
-- `generate_object_methods` — `test_generate_object_methods`
-- `generate_object_interface_implementations` — `test_object_interface_implementations`
-- `generate_properties_struct` — `test_generate_properties_struct_*`
-- `generate_object_set_properties` — `test_generate_object_set_properties_*`
-- `generate_property_methods` — `test_generate_property_methods_*`
-- `generate_object_binding` — `test_generate_object_binding_creates_file`
+### Covered Areas
+- **gen/gi_test.v**: Repository loading, info querying, type mapping, basic metadata access.
+- **gen/util_test.v**: Path resolution, name sanitization, binding dir naming.
+- **gen/bind_test.v**: Binding generation (objects, interfaces, enums), file creation, content validation.
+- **gen/int_test.v**: Integer/type handling (likely integration for methods/properties).
 
-### bind.v — not yet tested
-- `generate_readme`
-- `generate_compat_c`
-- `generate_v_util`
-- `get_library_c_info`
-- `get_c_type`
-- `get_c_return_sig`
-- `get_v_return_sig`
+### Untested/Not Yet Covered
+- **bind.v**: `generate_readme`, `generate_compat_c`, `generate_v_util` — integration-tested via bind_test.v.
+- `get_library_c_info`, `get_c_type`, `get_c_return_sig`, `get_v_return_sig` — used but no isolated tests.
+- Edge cases: Cross-namespace imports, error paths, large metadata sets.
+- New features (e.g., nullables, out params) need tests.
+
+Overall: ~75% test coverage (solid on core; room for edges/complex types). Run with `PKG_CONFIG_PATH=... v test .` for full suite.
 
 ## Complex Types (gi.v TypeInfo.to_v_type)
 
-Currently return voidptr - need proper handling:
-- Arrays (gi_type_tag_array)
-- Interfaces (gi_type_tag_interface) - should resolve to actual type name
-- Lists (GList, GSList)
-- Hash tables (GHashTable)
-- Errors (GError)
-- Unichar
+Currently return `voidptr` - need proper handling:
+- Arrays (gi_type_tag_array) — not mapped.
+- Interfaces (gi_type_tag_interface) — returns `voidptr`; resolution to actual type (e.g., `GioAction`) partially works via parent checks but params/returns stay voidptr.
+- Lists (GList, GSList) — voidptr.
+- Hash tables (GHashTable) — voidptr.
+- Errors (GError) — handled via shared error in methods, but type itself voidptr.
+- Unichar — voidptr.
 
 ## Out/Inout Parameters
 
-- Only "in" direction parameters are generated
-- Need to handle output parameters (pointers in V)
-- Need to handle inout parameters (mut refs)
+- Only "in" direction parameters generated (gi_direction_in).
+- Output (gi_direction_out) and inout (gi_direction_inout) ignored — no pointer/mut ref handling.
+- Impacts APIs returning multiple values (common in GLib).
 
 ## Other Metadata Types
 
-Still missing:
-- Constants (gi_info_type_constant)
-- Structs (non-object, gi_info_type_struct)
-- Unions (gi_info_type_union)
-- Callbacks (gi_info_type_callback)
-- Functions (module-level, not methods)
+Still missing full generation:
+- Constants (gi_info_type_constant) — not iterated in bind.v.
+- Structs (non-object, gi_info_type_struct) — not handled (only objects/interfaces/enums).
+- Unions (gi_info_type_union) — not handled.
+- Callbacks (gi_info_type_callback) — not handled.
+- Functions (module-level, not methods) — bind.v only processes objects/interfaces/enums; no top-level funcs.
 
 ## Signals
 
-- No signal introspection
-- No signal connection methods (connect, disconnect, emit)
+- No signal introspection (gi_info_type_signal not processed).
+- No methods for connect/disconnect/emit.
 
 ## Nullable Types
 
-- may_return_null() is queried but not used
-- Should generate ?Type for nullable returns
-- Nullable parameters not handled
+- `may_return_null()` queried but **not used** — returns always non-optional (e.g., `string` not `?string`).
+- Parameter nullability (`may_be_null()`) ignored — no `?type` for params.
+- `gi_arg_info_is_optional()` not declared/used in compat.c.v.
 
 ## Documentation
 
-- No doc comment generation from GI metadata
-- Could use gi_base_info_get_attribute() for docs
+- No doc comments from GI metadata (gi_base_info_get_attribute not used).
 
 ## Memory Management
 
-- No ref/unref generation for object types
-- No free methods for returned structs
-- No ownership transfer annotation handling
+- No explicit ref/unref methods generated.
+- No free() for returned structs (assumes caller manages).
+- Ownership transfer (transfer=full/full) not handled — all returns unowned.
 
 ## Constructors
 
-- Only g_object_new() style constructors
-- Missing constructor functions (e.g., gtk_window_new())
-- Missing factory methods
+- Only generic `g_object_new()` via type_init (if available).
+- **Missing** specific constructors (e.g., `gtk_window_new()`) — treated as regular methods.
+- No factory methods distinguished.
 
 ## Type Safety
 
-- Interface parameters/returns are voidptr (gi_type_tag_interface not yet resolved)
-- Array element types not tracked
-- Generic container types not specialized
+- Interface types: voidptr (no resolution to concrete types like `GioAction`).
+- Arrays: no element type tracking.
+- Generics: no specialization for containers.
+- Cross-namespace: imports generated, but types fallback to voidptr if unresolved.
 
 # Priorities
 
 ## High Priority (Needed for basic functionality)
 
-1. DONE - Interface type resolution - Most GObject APIs use interfaces heavily
-2. DONE - Enums and flags - Essential for any real API usage
-3. DONE - GError handling - ! return types generated, v_check_shared_error() used
-4. Nullable return types - Many methods return optional values
-5. Constructor functions - Many objects have specific constructors
+1. DONE - Interface type resolution - Parent interfaces embedded; methods implemented on objects.
+2. DONE - Enums and flags - Generated with proper V syntax (@[flag] for flags).
+3. DONE - GError handling - Shared error via `v_check_shared_error()`; ! returns for throwers.
+4. **Nullable return types** - `may_return_null()` ignored; generate `?Type` for optionals (e.g., many GTK returns).
+5. **Constructor functions** - Only generic; add specific ctors as distinguished methods.
+6. **Out parameters** - Common in APIs; handle as mut refs or out structs.
 
-##  Medium Priority (Needed for real-world usage)
+## Medium Priority (Needed for real-world usage)
 
-6. Out parameters - Common in GLib/GTK APIs
-7. Signals - Core to GObject event system
-8. Arrays - Many methods take/return arrays
-9. Lists (GList/GSList) - Common in older APIs
-10. Module-level functions - Not all functions are methods
+7. **Signals** - Essential for events; add gi_info_type_signal processing.
+8. **Arrays** - Map to fixed arrays or slices; track element types.
+9. Lists (GList/GSList) — Generate list helpers or voidptr with length.
+10. **Module-level functions** - Process gi_info_type_function for non-method APIs.
+11. **Constants** - Generate const vals from gi_info_type_constant.
 
-##  Low Priority (Nice to have)
+## Low Priority (Nice to have)
 
-11. Documentation comments - Improves developer experience
-12. Callbacks - Advanced usage
-13. Hash tables - Less common
-14. Unions - Rare in modern APIs
-15. Memory management annotations - Optimization
+12. Documentation comments — Pull from GI attrs for godoc.
+13. Callbacks — Handle gi_info_type_callback for signals/closures.
+14. Hash tables — GHashTable wrappers.
+15. Unions — Rare; basic struct mapping.
+16. Memory management annotations — Add ref/unref based on transfer=.
 
 # Complete
 
-- Core infrastructure: ~90% complete
-- Basic object bindings: ~70% complete (objects, interfaces, enums, error handling work)
-- Full API coverage: ~40% complete (constants, structs, unions, callbacks, module functions missing)
-- Production ready: ~35% (critical features in place; nullable types, constructors, out params still missing)
-
-The foundation is solid. Error handling, interfaces, and enums are implemented.
-Key gaps remaining: nullable returns, named constructors, out parameters, and signals.
+- Core infrastructure: ~90% complete (GI querying, generation, tests all pass; env setup required).
+- Basic object bindings: ~70% complete (structs, in-methods, properties, enums generated/tested; nullables/out-params/signals missing for usability).
+- Full API coverage: ~35% complete (objects/interfaces/enums; no constants/structs/unions/callbacks/module-funcs/signals).
+- Production ready: ~50% (Compilable, tested bindings for basics; high-pri fixes enable practical GTK/GLib use; cross-ns works).
