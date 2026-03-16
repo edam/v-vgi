@@ -535,8 +535,8 @@ fn generate_c_method_declaration(method FunctionInfo) string {
 		return ''
 	}
 
-	// build C parameter list
-	mut c_params := ['obj voidptr']
+	// build C parameter list (constructors have no receiver)
+	mut c_params := if method.is_constructor() { []string{} } else { ['obj voidptr'] }
 	n_args := method.get_n_args()
 
 	for j in 0 .. int(n_args) {

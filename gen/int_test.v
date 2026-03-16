@@ -7,20 +7,18 @@ module main
 
 import edam.vgi.gtk_4_0 as gtk
 
-@[heap]
-struct MyApp {
-	gtk.Application
+fn test_window_ctor() !&gtk.Window {
+	return gtk.Window.new()
 }
 
-fn MyApp.new() &MyApp {
-	return &MyApp{
-		Application: *gtk.Application.new()
-	}
+fn test_label_ctor() !&gtk.Label {
+	return gtk.Label.new('Hello')
 }
 
 fn main() {
-	app := MyApp.new()
-	println('Version \${app.get_version()}')
+	// exercise named constructors (compile-only check; GTK not initialised)
+	_ := test_window_ctor
+	_ := test_label_ctor
 }
 "
 
@@ -33,17 +31,8 @@ fn test_generated_bindings_integration() {
 	println('Generating bindings for integration test...')
 	for lib in libraries {
 		println('  Generating ${lib}...')
-		// parse library-version format
-		last_hyphen := lib.last_index('-') or {
-			eprintln('Failed to parse ${lib}')
-			assert false
-			return
-		}
-		library := lib[..last_hyphen]
-		version := lib[last_hyphen + 1..]
-
-		// generate bindings
-		generate_bindings(library, version)
+		parts := lib.split('-')
+		generate_bindings(parts[0], parts[1])
 	}
 
 	println('Creating test application...')
@@ -70,8 +59,9 @@ fn test_generated_bindings_integration() {
 
 	println('Compiling test application...')
 
-	// try to compile the test file
-	result := os.execute('v run ${test_file}')
+	// compile only (not run) — generated bindings may require GTK display/init at runtime
+	test_bin := os.join_path(test_dir, 'test_bin')
+	result := os.execute('v -o ${test_bin} ${test_file}')
 
 	if result.exit_code != 0 {
 		eprintln('Compilation failed:')

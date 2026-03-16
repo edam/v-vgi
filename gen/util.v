@@ -16,7 +16,8 @@ pub fn sanitize_param_name(name string) string {
 		'mut', 'shared', 'static', 'volatile', 'unsafe', 'return', 'if', 'else', 'for', 'match',
 		'select', 'defer', 'goto', 'break', 'continue', 'in', 'is', 'as', 'or', 'and', 'not',
 		'none', 'true', 'false', 'nil', 'sizeof', 'typeof', 'isreftype', 'offsetof', 'dump',
-		'assert', 'map', 'chan', 'lock', 'rlock', 'go', 'spawn', 'asm', '__global', '__offsetof' {
+		'assert', 'map', 'chan', 'lock', 'rlock', 'go', 'spawn', 'asm', '__global', '__offsetof',
+		'error', 'panic', 'exit', 'print', 'println', 'eprint', 'eprintln' {
 			'${name}_'
 		}
 		else {

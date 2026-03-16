@@ -317,6 +317,15 @@ pub fn (info FunctionInfo) can_throw_gerror() bool {
 	return C.gi_callable_info_can_throw_gerror(&C.GICallableInfo(info.ptr))
 }
 
+// GIFunctionInfoFlags
+const gi_function_is_constructor = u32(1 << 1)
+
+// return true if function is a constructor (static factory, no self arg)
+pub fn (info FunctionInfo) is_constructor() bool {
+	flags := C.gi_function_info_get_flags(&C.GIFunctionInfo(info.ptr))
+	return (flags & gi_function_is_constructor) != 0
+}
+
 // return the C symbol name for the function
 pub fn (info FunctionInfo) get_symbol() string {
 	symbol := C.gi_function_info_get_symbol(&C.GIFunctionInfo(info.ptr))

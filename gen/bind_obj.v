@@ -62,6 +62,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 
 	content += generate_properties_struct(info, object_name, parent_name, parent_embed)
 	content += generate_object_constructor(info, object_name, parent_name)
+	content += generate_object_named_constructors(info, object_name)
 	content += generate_object_set_properties(info, object_name, parent_name)
 	content += generate_property_methods(info, object_name)
 	content += generate_object_methods(info, object_name)
@@ -111,8 +112,11 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 	return content
 }
 
-// generate Object.new() constructor
+// generate Object.new() constructor; skipped if a specific GI 'new' constructor exists
 fn generate_object_constructor(info ObjectInfo, object_name string, parent_name string) string {
+	if object_has_specific_new(info) {
+		return ''
+	}
 	type_init := info.get_type_init()
 	if type_init == '' {
 		// no type init function, generate stub
@@ -232,6 +236,12 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		method := info.get_method(u32(i)) or { continue }
 		method_name := method.get_name()
 
+		// skip constructors (generated separately as static funcs)
+		if method.is_constructor() {
+			method.free()
+			continue
+		}
+
 		// skip private methods
 		if method_name.starts_with('_') {
 			method.free()
@@ -301,6 +311,98 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_sig} {\n'
 		content += generate_method_body(symbol, 'obj.ptr', call_args, return_v_type, can_throw,
 			may_null, skip_return)
+		content += '}\n\n'
+
+		method.free()
+	}
+
+	return content
+}
+
+// return true if the object has a GI constructor named 'new'
+fn object_has_specific_new(info ObjectInfo) bool {
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		is_ctor := method.is_constructor()
+		name := method.get_name()
+		method.free()
+		if is_ctor && name == 'new' {
+			return true
+		}
+	}
+	return false
+}
+
+// generate named constructors as static functions (e.g. Window.new(), Label.new_with_mnemonic())
+fn generate_object_named_constructors(info ObjectInfo, object_name string) string {
+	mut content := ''
+
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+
+		if !method.is_constructor() {
+			method.free()
+			continue
+		}
+
+		method_name := method.get_name()
+
+		// skip private
+		if method_name.starts_with('_') {
+			method.free()
+			continue
+		}
+
+		symbol := method.get_symbol()
+		if symbol == '' {
+			method.free()
+			continue
+		}
+
+		v_method_name := method_name.replace('-', '_')
+
+		// build parameter list and call args (no receiver)
+		mut params := []string{}
+		mut call_args := []string{}
+		n_args := method.get_n_args()
+		for j in 0 .. int(n_args) {
+			arg := method.get_arg(u32(j)) or { continue }
+			arg_name := sanitize_param_name(arg.get_name())
+			arg_type := arg.get_v_type()
+			direction := arg.get_direction()
+
+			if direction == gi_direction_in {
+				params << '${arg_name} ${arg_type}'
+				call_arg := if arg_type == 'string' { '${arg_name}.str' } else { arg_name }
+				call_args << call_arg
+			}
+
+			arg.free()
+		}
+
+		param_list := params.join(', ')
+		can_throw := method.can_throw_gerror()
+
+		// constructors always return the object type; always !& since C can return null
+		content += 'pub fn ${object_name}.${v_method_name}(${param_list}) !&${object_name} {\n'
+		content += '\tv_result := C.${symbol}('
+		if call_args.len > 0 {
+			content += call_args.join(', ')
+		}
+		if can_throw {
+			if call_args.len > 0 {
+				content += ', '
+			}
+			content += 'unsafe { v_get_shared_error() }'
+		}
+		content += ')\n'
+		if can_throw {
+			content += '\tv_check_shared_error()!\n'
+		}
+		content += '\tif v_result == unsafe { nil } { return error(\'${symbol} returned null\') }\n'
+		content += '\treturn &${object_name}{ptr: unsafe { voidptr(v_result) }}\n'
 		content += '}\n\n'
 
 		method.free()
