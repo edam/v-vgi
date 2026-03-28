@@ -62,7 +62,6 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 
 	content += generate_properties_struct(info, object_name, parent_name, parent_embed)
 	content += generate_object_constructor(info, object_name, parent_name)
-	content += generate_object_named_constructors(info, object_name)
 	content += generate_object_set_properties(info, object_name, parent_name)
 	content += generate_property_methods(info, object_name)
 	content += generate_object_methods(info, object_name)
@@ -96,11 +95,7 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 		}
 
 		prop_name := prop.get_name()
-
-		// convert kebab-case to snake_case
-		v_prop_name := prop_name.replace('-', '_')
-
-		// property type matches the helper function name
+		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
 		v_type := prop.get_property_helper_name()
 
 		content += '\t${v_prop_name} ?${v_type}\n'
@@ -112,14 +107,25 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 	return content
 }
 
-// generate Object.new() constructor; skipped if a specific GI 'new' constructor exists
+// generate Object.new(properties ObjectProperties) constructor.
+// if a specific GI 'new' constructor exists, uses it (pulling args from the properties
+// struct by name); otherwise falls back to the generic g_object_new().
 fn generate_object_constructor(info ObjectInfo, object_name string, parent_name string) string {
-	if object_has_specific_new(info) {
-		return ''
+	// look for a GI constructor named 'new'
+	n_methods := info.get_n_methods()
+	for i in 0 .. int(n_methods) {
+		method := info.get_method(u32(i)) or { continue }
+		if method.is_constructor() && method.get_name() == 'new' {
+			result := generate_object_gi_constructor(method, info, object_name, parent_name)
+			method.free()
+			return result
+		}
+		method.free()
 	}
+
+	// fall back to g_object_new
 	type_init := info.get_type_init()
 	if type_init == '' {
-		// no type init function, generate stub
 		mut content := 'pub fn ${object_name}.new(properties ${object_name}Properties) &${object_name} {\n'
 		content += '\tpanic("${object_name}.new() not yet implemented - no type init")\n'
 		content += '}\n\n'
@@ -128,15 +134,105 @@ fn generate_object_constructor(info ObjectInfo, object_name string, parent_name 
 
 	mut content := 'pub fn ${object_name}.new(properties ${object_name}Properties) &${object_name} {\n'
 	content += '\tobj_ptr := C.g_object_new(C.${type_init}(), unsafe { nil })\n'
-	content += '\tobj := &${object_name}{ptr: unsafe { voidptr(obj_ptr) }}\n'
-
-	// setup parent properties
+	content += '\tif obj_ptr == unsafe { nil } { panic(\'g_object_new returned null for ${object_name}\') }\n'
+	content += '\tv_object := &${object_name}{ptr: unsafe { voidptr(obj_ptr) }}\n'
 	if parent_name != '' {
-		content += '\tobj.${parent_name}.set_properties(properties.${parent_name}Properties)\n'
+		content += '\tv_object.${parent_name}.set_properties(properties.${parent_name}Properties)\n'
+	}
+	content += '\tv_object.set_properties(properties)\n'
+	content += '\treturn v_object\n'
+	content += '}\n\n'
+	return content
+}
+
+// collect writable property field names (sanitized snake_case) for an object and all
+// its ancestors — mirrors exactly what generate_properties_struct puts in the struct
+fn collect_all_property_names(info ObjectInfo) map[string]bool {
+	mut names := map[string]bool{}
+	n_props := info.get_n_properties()
+	for i in 0 .. int(n_props) {
+		prop := info.get_property(u32(i)) or { continue }
+		if prop.is_writable() {
+			names[sanitize_param_name(prop.get_name().replace('-', '_'))] = true
+		}
+		prop.free()
+	}
+	if parent := info.get_parent() {
+		for name, _ in collect_all_property_names(parent) {
+			names[name] = true
+		}
+		parent.free()
+	}
+	return names
+}
+
+// generate Object.new(properties ObjectProperties) using a specific GI constructor.
+// constructor args are pulled from the properties struct by matching name; any not
+// found fall back to a zero/nil default. set_properties() handles the rest.
+fn generate_object_gi_constructor(ctor FunctionInfo, info ObjectInfo, object_name string, parent_name string) string {
+	symbol := ctor.get_symbol()
+	can_throw := ctor.can_throw_gerror()
+	prop_names := collect_all_property_names(info)
+
+	return_type := if can_throw { '!&${object_name}' } else { '&${object_name}' }
+	mut content := 'pub fn ${object_name}.new(properties ${object_name}Properties) ${return_type} {\n'
+
+	mut call_args := []string{}
+	n_args := ctor.get_n_args()
+	for j in 0 .. int(n_args) {
+		arg := ctor.get_arg(u32(j)) or { continue }
+		if arg.get_direction() != gi_direction_in {
+			arg.free()
+			continue
+		}
+
+		raw_name := arg.get_name()
+		arg_name := sanitize_param_name(raw_name)
+		v_prop_name := sanitize_param_name(raw_name.replace('-', '_'))
+		arg_type := arg.get_v_type()
+
+		if v_prop_name in prop_names {
+			if arg_type == 'string' {
+				// string: pass .str if set, nil if not
+				content += '\t${arg_name} := if val := properties.${v_prop_name} { val.str } else { unsafe { &char(nil) } }\n'
+			} else {
+				content += '\t${arg_name} := properties.${v_prop_name} or { ${default_value_for_type(arg_type)} }\n'
+			}
+		} else {
+			// no matching property — use zero/nil default
+			if arg_type == 'string' {
+				content += '\t${arg_name} := unsafe { &char(nil) }\n'
+			} else {
+				content += '\t${arg_name} := ${default_value_for_type(arg_type)}\n'
+			}
+		}
+
+		call_args << arg_name
+		arg.free()
 	}
 
-	content += '\tobj.set_properties(properties)\n'
-	content += '\treturn obj\n'
+	content += '\tv_result := C.${symbol}(${call_args.join(', ')}'
+	if can_throw {
+		if call_args.len > 0 {
+			content += ', '
+		}
+		content += 'unsafe { v_get_shared_error() }'
+	}
+	content += ')\n'
+	if can_throw {
+		content += '\tv_check_shared_error()!\n'
+	}
+	if can_throw {
+		content += '\tif v_result == unsafe { nil } { return error(\'${symbol} returned null\') }\n'
+	} else {
+		content += '\tif v_result == unsafe { nil } { panic(\'${symbol} returned null\') }\n'
+	}
+	content += '\tv_object := &${object_name}{ptr: unsafe { voidptr(v_result) }}\n'
+	if parent_name != '' {
+		content += '\tv_object.${parent_name}.set_properties(properties.${parent_name}Properties)\n'
+	}
+	content += '\tv_object.set_properties(properties)\n'
+	content += '\treturn v_object\n'
 	content += '}\n\n'
 	return content
 }
@@ -156,7 +252,7 @@ fn generate_object_set_properties(info ObjectInfo, object_name string, parent_na
 		}
 
 		prop_name := prop.get_name()
-		v_prop_name := prop_name.replace('-', '_')
+		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
 		v_type := prop.get_property_helper_name()
 
 		content += '\tif value := properties.${v_prop_name} {\n'
@@ -188,9 +284,7 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 	for i in 0 .. int(n_props) {
 		prop := info.get_property(u32(i)) or { continue }
 		prop_name := prop.get_name()
-		v_prop_name := prop_name.replace('-', '_')
-
-		// property type matches the helper function name
+		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
 		v_type := prop.get_property_helper_name()
 
 		// getter if readable and no method exists
@@ -311,98 +405,6 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_sig} {\n'
 		content += generate_method_body(symbol, 'obj.ptr', call_args, return_v_type, can_throw,
 			may_null, skip_return)
-		content += '}\n\n'
-
-		method.free()
-	}
-
-	return content
-}
-
-// return true if the object has a GI constructor named 'new'
-fn object_has_specific_new(info ObjectInfo) bool {
-	n_methods := info.get_n_methods()
-	for i in 0 .. int(n_methods) {
-		method := info.get_method(u32(i)) or { continue }
-		is_ctor := method.is_constructor()
-		name := method.get_name()
-		method.free()
-		if is_ctor && name == 'new' {
-			return true
-		}
-	}
-	return false
-}
-
-// generate named constructors as static functions (e.g. Window.new(), Label.new_with_mnemonic())
-fn generate_object_named_constructors(info ObjectInfo, object_name string) string {
-	mut content := ''
-
-	n_methods := info.get_n_methods()
-	for i in 0 .. int(n_methods) {
-		method := info.get_method(u32(i)) or { continue }
-
-		if !method.is_constructor() {
-			method.free()
-			continue
-		}
-
-		method_name := method.get_name()
-
-		// skip private
-		if method_name.starts_with('_') {
-			method.free()
-			continue
-		}
-
-		symbol := method.get_symbol()
-		if symbol == '' {
-			method.free()
-			continue
-		}
-
-		v_method_name := method_name.replace('-', '_')
-
-		// build parameter list and call args (no receiver)
-		mut params := []string{}
-		mut call_args := []string{}
-		n_args := method.get_n_args()
-		for j in 0 .. int(n_args) {
-			arg := method.get_arg(u32(j)) or { continue }
-			arg_name := sanitize_param_name(arg.get_name())
-			arg_type := arg.get_v_type()
-			direction := arg.get_direction()
-
-			if direction == gi_direction_in {
-				params << '${arg_name} ${arg_type}'
-				call_arg := if arg_type == 'string' { '${arg_name}.str' } else { arg_name }
-				call_args << call_arg
-			}
-
-			arg.free()
-		}
-
-		param_list := params.join(', ')
-		can_throw := method.can_throw_gerror()
-
-		// constructors always return the object type; always !& since C can return null
-		content += 'pub fn ${object_name}.${v_method_name}(${param_list}) !&${object_name} {\n'
-		content += '\tv_result := C.${symbol}('
-		if call_args.len > 0 {
-			content += call_args.join(', ')
-		}
-		if can_throw {
-			if call_args.len > 0 {
-				content += ', '
-			}
-			content += 'unsafe { v_get_shared_error() }'
-		}
-		content += ')\n'
-		if can_throw {
-			content += '\tv_check_shared_error()!\n'
-		}
-		content += '\tif v_result == unsafe { nil } { return error(\'${symbol} returned null\') }\n'
-		content += '\treturn &${object_name}{ptr: unsafe { voidptr(v_result) }}\n'
 		content += '}\n\n'
 
 		method.free()

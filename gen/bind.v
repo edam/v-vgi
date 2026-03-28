@@ -574,6 +574,18 @@ fn generate_c_method_declaration(method FunctionInfo) string {
 }
 
 
+// return a zero/nil literal for a V type, used as a default when a constructor
+// arg has no matching property in the properties struct
+fn default_value_for_type(v_type string) string {
+	return match v_type {
+		'bool' { 'false' }
+		'string' { "''" }
+		'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64', 'u64' { '0' }
+		'f32', 'f64' { '0.0' }
+		else { 'unsafe { nil }' } // voidptr and pointer types
+	}
+}
+
 fn get_c_type(v_type string) string {
 	return match v_type {
 		'string' { '&char' }
