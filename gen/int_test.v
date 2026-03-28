@@ -2,28 +2,8 @@ module gen
 
 import os
 
-const test_code = "
-module main
-
-import edam.vgi.gtk_4_0 as gtk
-
-fn test_window_ctor() &gtk.Window {
-	return gtk.Window.new()
-}
-
-fn test_label_ctor() &gtk.Label {
-	return gtk.Label.new(label: 'Hello')
-}
-
-fn main() {
-	// compile-only check; GTK not initialised at runtime
-	_ := test_window_ctor
-	_ := test_label_ctor
-}
-"
-
 fn test_generated_bindings_integration() {
-	// integration test: generate bindings and verify they compile
+	// integration test: generate bindings, then compile each file in int_tests/ in sorted order
 	// note: library names and versions are hard-coded but this is acceptable
 
 	libraries := ['Gtk-4.0', 'Gio-2.0', 'GObject-2.0', 'Gdk-4.0']
@@ -35,7 +15,16 @@ fn test_generated_bindings_integration() {
 		generate_bindings(parts[0], parts[1])
 	}
 
-	println('Creating test application...')
+	// find test files in int_tests/ relative to this file
+	int_tests_dir := os.join_path(os.dir(@FILE), 'int_tests')
+	mut test_files := os.glob('${int_tests_dir}/*.v') or {
+		eprintln('Failed to list int_tests directory: ${err}')
+		assert false
+		return
+	}
+	test_files.sort()
+
+	assert test_files.len > 0, 'No test files found in ${int_tests_dir}'
 
 	// create temporary directory in /tmp
 	test_dir := os.join_path('/tmp', 'vgi_int_test_${os.getpid()}')
@@ -49,25 +38,22 @@ fn test_generated_bindings_integration() {
 		os.rmdir_all(test_dir) or {}
 	}
 
-	// create test V file
-	test_file := os.join_path(test_dir, 'vgi_int.v')
-	os.write_file(test_file, test_code) or {
-		eprintln('Failed to write test file: ${err}')
-		assert false
-		return
+	mut passed := 0
+	for test_file in test_files {
+		name := os.base(test_file)
+		println('  Compiling ${name}...')
+
+		test_bin := os.join_path(test_dir, name.replace('.v', ''))
+		result := os.execute('v -o ${test_bin} ${test_file}')
+
+		if result.exit_code != 0 {
+			eprintln('Compilation failed for ${name}:')
+			eprintln(result.output)
+			assert false, '${name} failed to compile'
+			return
+		}
+		passed++
 	}
 
-	println('Compiling test application...')
-
-	// compile only (not run) — generated bindings may require GTK display/init at runtime
-	test_bin := os.join_path(test_dir, 'test_bin')
-	result := os.execute('v -o ${test_bin} ${test_file}')
-
-	if result.exit_code != 0 {
-		eprintln('Compilation failed:')
-		eprintln(result.output)
-		assert false, 'Generated bindings failed to compile'
-	}
-
-	println('Integration test passed!')
+	println('Integration tests passed (${passed}/${test_files.len}).')
 }
