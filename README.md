@@ -15,7 +15,7 @@ library to dynamically setup bindings.
 For V, this module enables you to generate (and regenerate, to refresh) static
 bindings, ready to be imported, based on this GObject introspection mechanism.
 
-## Quick Example
+## Quick Start
 
 How to use Gtk 4.x on a Mac...
 
@@ -35,10 +35,21 @@ win := gtk.Window.new()
 
 # Installing
 
-## GObject introspection
+1. Install vgi
+2. Install libgirepository
+3. Generate bindings
+4. Use library (e.g., GTK)
 
-Vgi uses GObject introspection to work out bindings.  So you need
-libgirepository installed.
+## 1. Install vgi
+
+``` Shel
+v install edam.vgi
+```
+
+## 2. Ensure you have libgirepository installed
+
+Vgi uses the GObject introspection repository library, like python's PyGi.  You
+need to ensure that `libgirepository` is correctly installed.
 
 ### Mac/OSX
 
@@ -48,38 +59,32 @@ libgirepository installed.
 brew install gtk4
 ```
 
-## Then install vgi module
+## 3. Geenrate bindings for your favourite GObject-based libraries
+
+Run the `gi.vsh` script to generate bindings for V.
+
+For example:
 
 ``` Shell
-v install edam.vgi
+~/.vmodules/edam/vgi/gi.vsh Gtk 4.0
 ```
-
-Finally, run the `gi.vsh` script to generate bindings for V.
-
-## Generate bindings
 
 ### Mac/OSX
 
-On my Mac, I had to help V find the pkgconfig file for `libffi`, which is a
-dependency of `girepository-2.0`
+Help V find the pkgconfig file for `libffi`, which is a dependency of
+`girepository-2.0`
 
 ``` Shell
 export PKG_CONFIG_PATH="/usr/local/Homebrew/Library/Homebrew/os/mac/pkgconfig/15"
 ```
 
-### Then
-
-``` Shell
-~/.vmodules/edam/vgi/gi.vsh
-```
-
 # Documentation
 
-## Method
+## Generated Bindings
 
 Although GObject Introspection (gi) can be run dynamically (such as PyGi), this
-cannot be done for V, as we must run the code to generate before compiling the
-programme that uses them.  `gi.vsh` does exactly this.
+cannot be done for V, as we must run the code to generate bindings before
+compiling the programme that uses them.  `gi.vsh` does this.
 
 Generated bindings are placed in subdirectories in `vgi`, named after the
 library and version (e.g., `Gtk-4.0` becomes `gtk_4_0`) for compatibility and so
@@ -90,7 +95,7 @@ suggested that you import them with an alias:
 import edam.vgi.gtk_4_0 as gtk
 ```
 
-## Bindings
+## Library Bindings
 
 ### Objects
 
