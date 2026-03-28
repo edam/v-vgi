@@ -1,6 +1,6 @@
 # vgi
 
-This V modue provides GObject introspection bindings for V.  This provides
+This V module provides GObject introspection bindings for V.  This provides
 bindings for any GObject-based library, which includes (amongst others):
 * Gtk
 * Gdk
@@ -20,7 +20,7 @@ bindings, ready to be imported, based on this GObject introspection mechanism.
 How to use Gtk 4.x on a Mac...
 
 ``` Shell
-brew instll gtk4
+brew install gtk4
 v install edam.vgi
 ~/.vmodules/edam/vgi/gi.vsh Gtk 4.0
 ```
@@ -30,8 +30,7 @@ Then, in V...
 ``` V
 import edam.vgi.gtk_4_0 as gtk
 
-app := gtk.Application.new()
-app.run()
+win := gtk.Window.new()
 ```
 
 # Installing
@@ -39,7 +38,7 @@ app.run()
 ## GObject introspection
 
 Vgi uses GObject introspection to work out bindings.  So you need
-libgirepository instlled.
+libgirepository installed.
 
 ### Mac/OSX
 
@@ -59,7 +58,7 @@ Finally, run the `gi.vsh` script to generate bindings for V.
 
 ## Generate bindings
 
-### Max/OSX
+### Mac/OSX
 
 On my Mac, I had to help V find the pkgconfig file for `libffi`, which is a
 dependency of `girepository-2.0`
@@ -101,7 +100,7 @@ As well as defining `set_` and `get_` functions for properties, object
 properties can also be specified via a `[params]` struct in `new()`:
 
 ``` V
-obj1 := Object.new() // no properties specifiec
-obj1.set_some_property("foo")
-obj2 := Object.new(some_property="foo") // also works
+obj1 := Object.new() // no properties specified
+obj1.set_some_property('foo')
+obj2 := Object.new(some_property: 'foo') // also works
 ```

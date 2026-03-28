@@ -66,9 +66,12 @@ Still missing full generation:
 
 ## Constructors
 
-- Only generic `g_object_new()` via type_init (if available).
-- **Missing** specific constructors (e.g., `gtk_window_new()`) — treated as regular methods.
-- No factory methods distinguished.
+- Unified `Object.new(properties ObjectProperties)` constructor generated for all objects.
+- If a GI constructor named `new` exists (`GI_FUNCTION_IS_CONSTRUCTOR`), it is called internally, mapping args from the properties struct by name; remaining properties set via `set_properties()`.
+- Falls back to `g_object_new()` via type_init if no specific GI constructor exists.
+- Non-throwing constructors return `&T` and panic on NULL; throwing constructors return `!&T` and return error on NULL.
+- **Known limitation**: `gi_type_tag_interface` args that resolve to enum/flags types (e.g. `GApplicationFlags`) are declared as `voidptr` in C, causing C compiler type mismatch errors for affected constructors.
+- **Missing**: `G_PARAM_CONSTRUCT_ONLY` properties should be passed to `g_object_new` / the specific constructor rather than set post-construction via `set_properties()`.
 
 ## Type Safety
 
@@ -85,7 +88,7 @@ Still missing full generation:
 2. DONE - Enums and flags - Generated with proper V syntax (@[flag] for flags).
 3. DONE - GError handling - Shared error via `v_check_shared_error()`; ! returns for throwers.
 4. DONE - **Nullable return types** - `may_return_null()` → `?T` (no-throw) or `!T` with nil-as-error (throwing).
-5. **Constructor functions** - Only generic; add specific ctors as distinguished methods.
+5. DONE - **Constructor functions** - Unified `Object.new(properties)` with GI constructor internally; panic/error on NULL.
 6. **Out parameters** - Common in APIs; handle as mut refs or out structs.
 
 ## Medium Priority (Needed for real-world usage)
