@@ -72,25 +72,27 @@ Options:
 - `--version`: Show vgi module version
 
 ### Testing
-Run all tests:
+
+**Important**: due to a V/GCC issue, tests must be run with `-d dynamic_boehm`:
+
 ```bash
-v test .
+v -d dynamic_boehm test .
 ```
 
 Run specific test file:
 ```bash
-v test gen/gi_test.v
-v test gen/util_test.v
+v -d dynamic_boehm test gen/gi_test.v
+v -d dynamic_boehm test gen/util_test.v
 ```
 
 Run specific test function:
 ```bash
-v test . -run-only test_function_name
+v -d dynamic_boehm test . -run-only test_function_name
 ```
 
 Run with detailed statistics:
 ```bash
-v -stats test .
+v -d dynamic_boehm -stats test .
 ```
 
 ### Building/Compiling
@@ -181,7 +183,7 @@ Generated bindings support cross-namespace inheritance by importing dependency b
 - Test functions must start with `test_` prefix
 - Run tests with: `v test .`
 - Aim for clear, descriptive test names that explain what is being tested
-- **Always run the full test suite after making changes**: `v test .`
+- **Always run the full test suite after making changes**: `v -d dynamic_boehm test .`
 - **Do not run gi.vsh multiple times during testing** - it creates directories and generates many files. Use unit tests instead of repeatedly invoking gi.vsh
 - Focus tests on library code (`gen/bind.v`, `gen/bind_obj.v`, `gen/bind_inf.v`, `gen/gi.v`, `gen/util.v`) rather than CLI scripts like `gi.vsh` which are primarily glue code
 

@@ -8,11 +8,12 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 	file_name := interface_name.to_lower() + '.v'
 	file_path := os.join_path(binding_dir, file_name)
 	module_name := os.file_name(binding_dir)
+	namespace := info.get_namespace()
 
 	mut content := 'module ${module_name}\n\n'
 
 	// generate C method declarations
-	method_declarations := generate_interface_c_method_declarations(info)
+	method_declarations := generate_interface_c_method_declarations(info, namespace)
 	if method_declarations != '' {
 		content += method_declarations
 		content += '\n'
@@ -41,7 +42,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 			direction := arg.get_direction()
 			if direction == gi_direction_in {
 				arg_name := sanitize_param_name(arg.get_name())
-				arg_type := arg.get_v_type()
+				arg_type := arg.get_v_type(namespace)
 				params << '${arg_name} ${arg_type}'
 			}
 			arg.free()
@@ -51,7 +52,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 
 		// get return type
 		return_type_info := method.get_return_type()
-		return_v_type := return_type_info.to_v_type()
+		return_v_type := return_type_info.to_v_type(namespace)
 		return_type_info.free()
 
 		skip_return := method.skip_return() || return_v_type == 'void'
@@ -72,7 +73,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 	content += '}\n\n'
 
 	// generate methods on concrete struct
-	content += generate_interface_methods(info, interface_name)
+	content += generate_interface_methods(info, interface_name, namespace)
 
 	os.write_file(file_path, content) or {
 		eprintln('Warning: Failed to write ${file_path}')
@@ -81,13 +82,13 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 }
 
 // generate C function declarations for interface methods
-fn generate_interface_c_method_declarations(info InterfaceInfo) string {
+fn generate_interface_c_method_declarations(info InterfaceInfo, namespace string) string {
 	mut content := ''
 
 	n_methods := info.get_n_methods()
 	for j in 0 .. int(n_methods) {
 		method := info.get_method(u32(j)) or { continue }
-		content += generate_c_method_declaration(method)
+		content += generate_c_method_declaration(method, namespace)
 		method.free()
 	}
 
@@ -95,7 +96,7 @@ fn generate_interface_c_method_declarations(info InterfaceInfo) string {
 }
 
 // generate methods on the concrete interface struct
-fn generate_interface_methods(info InterfaceInfo, interface_name string) string {
+fn generate_interface_methods(info InterfaceInfo, interface_name string, namespace string) string {
 	mut content := ''
 
 	n_methods := info.get_n_methods()
@@ -126,14 +127,20 @@ fn generate_interface_methods(info InterfaceInfo, interface_name string) string 
 		for j in 0 .. int(n_args) {
 			arg := method.get_arg(u32(j)) or { continue }
 			arg_name := sanitize_param_name(arg.get_name())
-			arg_type := arg.get_v_type()
+			arg_type := arg.get_v_type(namespace)
 			direction := arg.get_direction()
 
 			// only handle 'in' parameters for now
 			if direction == gi_direction_in {
 				params << '${arg_name} ${arg_type}'
 				// convert V value to C value if needed
-				call_arg := if arg_type == 'string' { '${arg_name}.str' } else { arg_name }
+				call_arg := if arg_type == 'string' {
+					'${arg_name}.str'
+				} else if is_enum_v_type(arg_type) {
+					'int(${arg_name})'
+				} else {
+					arg_name
+				}
 				call_args << call_arg
 			}
 
@@ -144,7 +151,7 @@ fn generate_interface_methods(info InterfaceInfo, interface_name string) string 
 
 		// get return type
 		return_type_info := method.get_return_type()
-		return_v_type := return_type_info.to_v_type()
+		return_v_type := return_type_info.to_v_type(namespace)
 		return_type_info.free()
 
 		skip_return := method.skip_return() || return_v_type == 'void'

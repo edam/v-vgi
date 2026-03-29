@@ -34,9 +34,7 @@ fn test_generated_bindings_integration() {
 		return
 	}
 
-	defer {
-		os.rmdir_all(test_dir) or {}
-	}
+	defer { os.rmdir_all(test_dir) or {} }
 
 	mut passed := 0
 	for test_file in test_files {

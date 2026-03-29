@@ -228,10 +228,10 @@ pub fn (info PropertyInfo) get_type_info() TypeInfo {
 }
 
 // return the V type string for the property
-pub fn (info PropertyInfo) get_v_type() string {
+pub fn (info PropertyInfo) get_v_type(namespace string) string {
 	type_info := info.get_type_info()
 	defer { type_info.free() }
-	return type_info.to_v_type()
+	return type_info.to_v_type(namespace)
 }
 
 // return the GType constant name
@@ -452,10 +452,20 @@ pub fn (info ArgInfo) may_be_null() bool {
 }
 
 // return the V type string for the argument
-pub fn (info ArgInfo) get_v_type() string {
+pub fn (info ArgInfo) get_v_type(namespace string) string {
 	type_info := info.get_type_info()
 	defer { type_info.free() }
-	return type_info.to_v_type()
+	return type_info.to_v_type(namespace)
+}
+
+// return true if the argument type is an enum or flags, regardless of namespace
+pub fn (info ArgInfo) is_enum_or_flags() bool {
+	type_info := info.get_type_info()
+	defer { type_info.free() }
+	iface := type_info.get_interface_info() or { return false }
+	defer { iface.free() }
+	t := iface.get_type()
+	return t == 'enum' || t == 'flags'
 }
 
 // TypeInfo represents a GITypeInfo
@@ -473,8 +483,25 @@ pub fn (info TypeInfo) is_pointer() bool {
 	return C.gi_type_info_is_pointer(&C.GITypeInfo(info.ptr))
 }
 
-// converts the type to a V type string for use in generated code
-pub fn (info TypeInfo) to_v_type() string {
+// return the interface BaseInfo for a gi_type_tag_interface type, or none otherwise
+pub fn (info TypeInfo) get_interface_info() ?BaseInfo {
+	if info.get_tag() != gi_type_tag_interface {
+		return none
+	}
+	iface_ptr := C.gi_type_info_get_interface(&C.GITypeInfo(info.ptr))
+	if iface_ptr == unsafe { nil } {
+		return none
+	}
+	return BaseInfo{
+		ptr: iface_ptr
+	}
+}
+
+// converts the type to a V type string for use in generated code.
+// namespace is the GI namespace of the module being generated (e.g. "Gio"),
+// as returned by gi_base_info_get_namespace() — capitalised, not lowercased.
+// used to produce unqualified names for same-namespace enum/flags types.
+pub fn (info TypeInfo) to_v_type(namespace string) string {
 	type_tag := info.get_tag()
 	is_pointer := info.is_pointer()
 	base_type := match type_tag {
@@ -492,7 +519,23 @@ pub fn (info TypeInfo) to_v_type() string {
 		gi_type_tag_gtype { 'u64' } // size_t
 		gi_type_tag_void { return if is_pointer { 'voidptr' } else { 'void' } }
 		gi_type_tag_utf8, gi_type_tag_filename { return 'string' }
-		else { return 'voidptr' } // interfaces, arrays, lists, etc.
+		gi_type_tag_interface {
+			iface := info.get_interface_info() or { return 'voidptr' }
+			defer { iface.free() }
+			iface_type := iface.get_type()
+			if iface_type == 'enum' || iface_type == 'flags' {
+				iface_name := iface.get_name()
+				iface_ns := iface.get_namespace()
+				if iface_ns == namespace {
+					return iface_name
+				} else {
+					// cross-namespace enum/flags: use int (C-compatible, avoids import)
+					return 'int'
+				}
+			}
+			return 'voidptr'
+		}
+		else { return 'voidptr' } // arrays, lists, hash tables, etc.
 	}
 	return if is_pointer { '&${base_type}' } else { base_type }
 }
@@ -553,7 +596,15 @@ pub fn (info TypeInfo) needs_string_conversion() bool {
 }
 
 // return the helper function name prefix (e.g., "bool", "int", "string")
+// used to select get_X_property / set_X_property helpers in generated code
 pub fn (info TypeInfo) to_property_helper_name() string {
+	if info.get_tag() == gi_type_tag_interface {
+		iface := info.get_interface_info() or { return 'voidptr' }
+		defer { iface.free() }
+		t := iface.get_type()
+		if t == 'enum' || t == 'flags' { return 'int' }
+		return 'voidptr'
+	}
 	tag := info.get_tag()
 	return match tag {
 		gi_type_tag_boolean { 'bool' }

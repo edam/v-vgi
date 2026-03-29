@@ -72,7 +72,7 @@ fn test_object_methods() {
 
 	// test get_return_type
 	return_type := method.get_return_type()
-	return_v_type := return_type.to_v_type()
+	return_v_type := return_type.to_v_type('')
 	println('Return type: ${return_v_type}')
 	assert return_v_type.len > 0
 	return_type.free()
@@ -90,7 +90,7 @@ fn test_object_methods() {
 		assert arg_name.len > 0
 
 		// test get_v_type
-		arg_v_type := arg.get_v_type()
+		arg_v_type := arg.get_v_type('')
 		println('Argument type: ${arg_v_type}')
 		assert arg_v_type.len > 0
 

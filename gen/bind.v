@@ -523,7 +523,20 @@ fn generate_enum_binding(info EnumInfo, binding_dir string) {
 	}
 }
 
-fn generate_c_method_declaration(method FunctionInfo) string {
+// return true if v_type is a named enum/flags type (not a primitive, pointer, or voidptr)
+fn is_enum_v_type(v_type string) bool {
+	return match v_type {
+		'bool', 'string', 'voidptr', 'void', 'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64',
+		'u64', 'f32', 'f64' {
+			false
+		}
+		else {
+			v_type.len > 0 && v_type[0].is_capital() && !v_type.starts_with('&')
+		}
+	}
+}
+
+fn generate_c_method_declaration(method FunctionInfo, namespace string) string {
 	symbol := method.get_symbol()
 	if symbol == '' {
 		return ''
@@ -545,7 +558,7 @@ fn generate_c_method_declaration(method FunctionInfo) string {
 
 		if direction == gi_direction_in {
 			arg_name := sanitize_param_name(arg.get_name())
-			arg_type := get_c_type(arg.get_v_type())
+			arg_type := get_c_type(arg.get_v_type(namespace))
 			c_params << '${arg_name} ${arg_type}'
 		}
 
@@ -559,7 +572,7 @@ fn generate_c_method_declaration(method FunctionInfo) string {
 
 	// get return type
 	return_type_info := method.get_return_type()
-	return_v_type := return_type_info.to_v_type()
+	return_v_type := return_type_info.to_v_type(namespace)
 	return_type_info.free()
 
 	skip_return := method.skip_return()
@@ -582,7 +595,10 @@ fn default_value_for_type(v_type string) string {
 		'string' { "''" }
 		'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64', 'u64' { '0' }
 		'f32', 'f64' { '0.0' }
-		else { 'unsafe { nil }' } // voidptr and pointer types
+		'voidptr' { 'unsafe { nil }' }
+		else {
+			if v_type.starts_with('&') { 'unsafe { nil }' } else { 'unsafe { ${v_type}(0) }' } // enum/flags
+		}
 	}
 }
 
@@ -592,7 +608,10 @@ fn get_c_type(v_type string) string {
 		'bool' { 'bool' }
 		'void', 'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64', 'u64', 'f32', 'f64' { v_type }
 		'i32' { 'int' }
-		else { 'voidptr' }
+		'voidptr' { 'voidptr' }
+		else {
+			if v_type.starts_with('&') { 'voidptr' } else { 'int' } // enum/flags type names
+		}
 	}
 }
 
@@ -615,6 +634,7 @@ fn get_v_return_sig(v_type string, can_error bool, may_null bool, skip_return bo
 // generate the body of a method binding (from C call to return statement)
 fn generate_method_body(symbol string, receiver string, call_args []string, return_v_type string, can_throw bool, may_null bool, skip_return bool) string {
 	needs_string_conv := return_v_type == 'string'
+	needs_enum_cast := is_enum_v_type(return_v_type)
 	is_nullable_type := return_v_type == 'string' || return_v_type == 'voidptr'
 		|| return_v_type.starts_with('&')
 	effective_may_null := may_null && is_nullable_type
@@ -664,6 +684,8 @@ fn generate_method_body(symbol string, receiver string, call_args []string, retu
 		}
 		if needs_string_conv {
 			content += 'unsafe { cstring_to_vstring(C.${symbol}(${receiver}'
+		} else if needs_enum_cast {
+			content += 'unsafe { ${return_v_type}(C.${symbol}(${receiver}'
 		} else {
 			content += 'C.${symbol}(${receiver}'
 		}
@@ -671,13 +693,16 @@ fn generate_method_body(symbol string, receiver string, call_args []string, retu
 			content += ', ${call_args.join(', ')}'
 		}
 		if can_throw {
-			if needs_string_conv {
+			if needs_string_conv || needs_enum_cast {
+				// already inside an unsafe block — no extra unsafe wrapper needed
 				content += ', v_get_shared_error()'
 			} else {
 				content += ', unsafe { v_get_shared_error() }'
 			}
 		}
 		if needs_string_conv {
+			content += ')) }\n'
+		} else if needs_enum_cast {
 			content += ')) }\n'
 		} else {
 			content += ')\n'

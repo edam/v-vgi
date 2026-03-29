@@ -7,7 +7,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	object_name := info.get_name()
 	file_name := object_name.to_lower() + '.v'
 	file_path := os.join_path(binding_dir, file_name)
-	current_namespace := info.get_namespace()
+	namespace := info.get_namespace()
 
 	mut content := 'module ${os.file_name(binding_dir)}\n'
 
@@ -20,7 +20,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 		parent_name = p.get_name()
 		parent_namespace := p.get_namespace()
 
-		if parent_namespace != current_namespace {
+		if parent_namespace != namespace {
 			// cross-namespace parent - need import
 			repo := get_default_repository()
 			parent_version := repo.get_version(parent_namespace)
@@ -48,7 +48,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 	// add C.g_object_new declaration for constructor
 	content += 'fn C.g_object_new(object_type u64, first_property_name &char) voidptr\n'
-	content += generate_object_c_method_declarations(info)
+	content += generate_object_c_method_declarations(info, namespace)
 	content += '\n'
 
 	// struct with embedded parent (no implements clause)
@@ -60,12 +60,13 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 	content += '}\n\n'
 
-	content += generate_properties_struct(info, object_name, parent_name, parent_embed)
-	content += generate_object_constructor(info, object_name, parent_name)
-	content += generate_object_set_properties(info, object_name, parent_name)
-	content += generate_property_methods(info, object_name)
-	content += generate_object_methods(info, object_name)
-	content += generate_object_interface_implementations(info, object_name)
+	content += generate_properties_struct(info, object_name, parent_name, parent_embed,
+		namespace)
+	content += generate_object_constructor(info, object_name, parent_name, namespace)
+	content += generate_object_set_properties(info, object_name, parent_name, namespace)
+	content += generate_property_methods(info, object_name, namespace)
+	content += generate_object_methods(info, object_name, namespace)
+	content += generate_object_interface_implementations(info, object_name, namespace)
 
 	os.write_file(file_path, content) or {
 		eprintln('Warning: Failed to write ${file_path}')
@@ -74,7 +75,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 }
 
 // generate @[params] properties struct
-fn generate_properties_struct(info ObjectInfo, object_name string, parent_name string, parent_embed string) string {
+fn generate_properties_struct(info ObjectInfo, object_name string, parent_name string, parent_embed string, namespace string) string {
 	mut content := '@[params]\n'
 	content += 'pub struct ${object_name}Properties {\n'
 
@@ -96,7 +97,7 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 
 		prop_name := prop.get_name()
 		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
-		v_type := prop.get_property_helper_name()
+		v_type := prop.get_v_type(namespace)
 
 		content += '\t${v_prop_name} ?${v_type}\n'
 
@@ -110,13 +111,14 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 // generate Object.new(properties ObjectProperties) constructor.
 // if a specific GI 'new' constructor exists, uses it (pulling args from the properties
 // struct by name); otherwise falls back to the generic g_object_new().
-fn generate_object_constructor(info ObjectInfo, object_name string, parent_name string) string {
+fn generate_object_constructor(info ObjectInfo, object_name string, parent_name string, namespace string) string {
 	// look for a GI constructor named 'new'
 	n_methods := info.get_n_methods()
 	for i in 0 .. int(n_methods) {
 		method := info.get_method(u32(i)) or { continue }
 		if method.is_constructor() && method.get_name() == 'new' {
-			result := generate_object_gi_constructor(method, info, object_name, parent_name)
+			result := generate_object_gi_constructor(method, info, object_name, parent_name,
+				namespace)
 			method.free()
 			return result
 		}
@@ -169,7 +171,7 @@ fn collect_all_property_names(info ObjectInfo) map[string]bool {
 // generate Object.new(properties ObjectProperties) using a specific GI constructor.
 // constructor args are pulled from the properties struct by matching name; any not
 // found fall back to a zero/nil default. set_properties() handles the rest.
-fn generate_object_gi_constructor(ctor FunctionInfo, info ObjectInfo, object_name string, parent_name string) string {
+fn generate_object_gi_constructor(ctor FunctionInfo, info ObjectInfo, object_name string, parent_name string, namespace string) string {
 	symbol := ctor.get_symbol()
 	can_throw := ctor.can_throw_gerror()
 	prop_names := collect_all_property_names(info)
@@ -189,12 +191,16 @@ fn generate_object_gi_constructor(ctor FunctionInfo, info ObjectInfo, object_nam
 		raw_name := arg.get_name()
 		arg_name := sanitize_param_name(raw_name)
 		v_prop_name := sanitize_param_name(raw_name.replace('-', '_'))
-		arg_type := arg.get_v_type()
+		arg_type := arg.get_v_type(namespace)
+		is_enum := arg.is_enum_or_flags()
 
 		if v_prop_name in prop_names {
 			if arg_type == 'string' {
 				// string: pass .str if set, nil if not
 				content += '\t${arg_name} := if val := properties.${v_prop_name} { val.str } else { unsafe { &char(nil) } }\n'
+			} else if is_enum {
+				// enum/flags: cast to int for C call; use if/else to avoid or{} type mismatch
+				content += '\t${arg_name} := if val := properties.${v_prop_name} { int(val) } else { 0 }\n'
 			} else {
 				content += '\t${arg_name} := properties.${v_prop_name} or { ${default_value_for_type(arg_type)} }\n'
 			}
@@ -202,6 +208,8 @@ fn generate_object_gi_constructor(ctor FunctionInfo, info ObjectInfo, object_nam
 			// no matching property — use zero/nil default
 			if arg_type == 'string' {
 				content += '\t${arg_name} := unsafe { &char(nil) }\n'
+			} else if is_enum {
+				content += '\t${arg_name} := 0\n'
 			} else {
 				content += '\t${arg_name} := ${default_value_for_type(arg_type)}\n'
 			}
@@ -237,7 +245,7 @@ fn generate_object_gi_constructor(ctor FunctionInfo, info ObjectInfo, object_nam
 	return content
 }
 
-fn generate_object_set_properties(info ObjectInfo, object_name string, parent_name string) string {
+fn generate_object_set_properties(info ObjectInfo, object_name string, parent_name string, namespace string) string {
 	mut content := 'pub fn (obj &${object_name}) set_properties(properties ${object_name}Properties) {\n'
 
 	// set each property if provided using property helpers
@@ -253,10 +261,13 @@ fn generate_object_set_properties(info ObjectInfo, object_name string, parent_na
 
 		prop_name := prop.get_name()
 		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
-		v_type := prop.get_property_helper_name()
+		v_type := prop.get_v_type(namespace)
+		helper := prop.get_property_helper_name()
+		// cast enum/flags values to int for the helper function
+		value_expr := if is_enum_v_type(v_type) { 'int(value)' } else { 'value' }
 
 		content += '\tif value := properties.${v_prop_name} {\n'
-		content += '\t\tset_${v_type}_property(obj.ptr, \'${prop_name}\', value)\n'
+		content += '\t\tset_${helper}_property(obj.ptr, \'${prop_name}\', ${value_expr})\n'
 		content += '\t}\n'
 
 		prop.free()
@@ -267,7 +278,7 @@ fn generate_object_set_properties(info ObjectInfo, object_name string, parent_na
 }
 
 // generate property getter/setter methods
-fn generate_property_methods(info ObjectInfo, object_name string) string {
+fn generate_property_methods(info ObjectInfo, object_name string, namespace string) string {
 	mut content := ''
 
 	// collect method names to avoid duplicates
@@ -285,19 +296,23 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 		prop := info.get_property(u32(i)) or { continue }
 		prop_name := prop.get_name()
 		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
-		v_type := prop.get_property_helper_name()
+		v_type := prop.get_v_type(namespace)
+		helper := prop.get_property_helper_name()
 
 		// getter if readable and no method exists
 		if prop.is_readable() && 'get_${v_prop_name}' !in method_names {
+			raw_result := 'get_${helper}_property(obj.ptr, \'${prop_name}\')'
+			result_expr := if is_enum_v_type(v_type) { 'unsafe { ${v_type}(${raw_result}) }' } else { raw_result }
 			content += 'pub fn (obj &${object_name}) get_${v_prop_name}() ${v_type} {\n'
-			content += '\treturn get_${v_type}_property(obj.ptr, \'${prop_name}\')\n'
+			content += '\treturn ${result_expr}\n'
 			content += '}\n\n'
 		}
 
 		// setter if writable and no method exists
 		if prop.is_writable() && 'set_${v_prop_name}' !in method_names {
+			set_val := if is_enum_v_type(v_type) { 'int(value)' } else { 'value' }
 			content += 'pub fn (obj &${object_name}) set_${v_prop_name}(value ${v_type}) {\n'
-			content += '\tset_${v_type}_property(obj.ptr, \'${prop_name}\', value)\n'
+			content += '\tset_${helper}_property(obj.ptr, \'${prop_name}\', ${set_val})\n'
 			content += '}\n\n'
 		}
 
@@ -308,13 +323,13 @@ fn generate_property_methods(info ObjectInfo, object_name string) string {
 }
 
 // generate C function declarations for methods
-fn generate_object_c_method_declarations(info ObjectInfo) string {
+fn generate_object_c_method_declarations(info ObjectInfo, namespace string) string {
 	mut content := ''
 
 	n_methods := info.get_n_methods()
 	for i in 0 .. int(n_methods) {
 		method := info.get_method(u32(i)) or { continue }
-		content += generate_c_method_declaration(method)
+		content += generate_c_method_declaration(method, namespace)
 		method.free()
 	}
 
@@ -322,7 +337,7 @@ fn generate_object_c_method_declarations(info ObjectInfo) string {
 }
 
 // generate object method bindings
-fn generate_object_methods(info ObjectInfo, object_name string) string {
+fn generate_object_methods(info ObjectInfo, object_name string, namespace string) string {
 	mut content := ''
 
 	n_methods := info.get_n_methods()
@@ -375,14 +390,20 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 		for j in 0 .. int(n_args) {
 			arg := method.get_arg(u32(j)) or { continue }
 			arg_name := sanitize_param_name(arg.get_name())
-			arg_type := arg.get_v_type()
+			arg_type := arg.get_v_type(namespace)
 			direction := arg.get_direction()
 
 			// only handle 'in' parameters for now
 			if direction == gi_direction_in {
 				params << '${arg_name} ${arg_type}'
 				// convert V value to C value if needed
-				call_arg := if arg_type == 'string' { '${arg_name}.str' } else { arg_name }
+				call_arg := if arg_type == 'string' {
+					'${arg_name}.str'
+				} else if is_enum_v_type(arg_type) {
+					'int(${arg_name})'
+				} else {
+					arg_name
+				}
 				call_args << call_arg
 			}
 
@@ -393,7 +414,7 @@ fn generate_object_methods(info ObjectInfo, object_name string) string {
 
 		// get return type
 		return_type_info := method.get_return_type()
-		return_v_type := return_type_info.to_v_type()
+		return_v_type := return_type_info.to_v_type(namespace)
 		return_type_info.free()
 
 		skip_return := method.skip_return() || return_v_type == 'void'
@@ -428,7 +449,7 @@ fn object_needs_os_import(info ObjectInfo) bool {
 }
 
 // generate interface method implementations on an object
-fn generate_object_interface_implementations(info ObjectInfo, object_name string) string {
+fn generate_object_interface_implementations(info ObjectInfo, object_name string, namespace string) string {
 	mut content := ''
 
 	n_interfaces := info.get_n_interfaces()
@@ -506,14 +527,20 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 			for k in 0 .. int(n_args) {
 				arg := method.get_arg(u32(k)) or { continue }
 				arg_name := sanitize_param_name(arg.get_name())
-				arg_type := arg.get_v_type()
+				arg_type := arg.get_v_type(namespace)
 				direction := arg.get_direction()
 
 				// only handle 'in' parameters for now
 				if direction == gi_direction_in {
 					params << '${arg_name} ${arg_type}'
 					// convert V value to C value if needed
-					call_arg := if arg_type == 'string' { '${arg_name}.str' } else { arg_name }
+					call_arg := if arg_type == 'string' {
+						'${arg_name}.str'
+					} else if is_enum_v_type(arg_type) {
+						'int(${arg_name})'
+					} else {
+						arg_name
+					}
 					call_args << call_arg
 				}
 
@@ -524,7 +551,7 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 
 			// get return type
 			return_type_info := method.get_return_type()
-			return_v_type := return_type_info.to_v_type()
+			return_v_type := return_type_info.to_v_type(namespace)
 			return_type_info.free()
 
 			skip_return := method.skip_return() || return_v_type == 'void'

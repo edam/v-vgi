@@ -59,7 +59,7 @@ need to ensure that `libgirepository` is correctly installed.
 brew install gtk4
 ```
 
-## 3. Geenrate bindings for your favourite GObject-based libraries
+## 3. Generate bindings for your favourite GObject-based libraries
 
 Run the `gi.vsh` script to generate bindings for V.
 
@@ -99,7 +99,7 @@ import edam.vgi.gtk_4_0 as gtk
 
 ### Objects
 
-Objects map to V stuct types.  Use Object.new() to create.
+Objects map to V struct types.  Use Object.new() to create.
 
 As well as defining `set_` and `get_` functions for properties, object
 properties can also be specified via a `[params]` struct in `new()`:

@@ -29,13 +29,13 @@ fn test_generate_object_methods() {
 	obj := object_info or { panic('unreachable') }
 
 	// generate C declarations
-	c_decls := generate_object_c_method_declarations(obj)
+	c_decls := generate_object_c_method_declarations(obj, 'GObject')
 
 	// verify C declarations are generated
 	assert c_decls.contains('fn C.') || c_decls == '' // may have no public methods
 
 	// generate methods
-	content := generate_object_methods(obj, 'TestObject')
+	content := generate_object_methods(obj, 'TestObject', 'GObject')
 
 	// verify generated code contains method definitions
 	assert content.contains('pub fn (obj &TestObject)') || content == '' // may have no public methods
@@ -69,7 +69,7 @@ fn test_generate_object_constructor() {
 	obj := object_info or { panic('unreachable') }
 
 	// generate constructor
-	content := generate_object_constructor(obj, 'TestObject', 'ParentObject')
+	content := generate_object_constructor(obj, 'TestObject', 'ParentObject', 'GObject')
 
 	// verify constructor signature
 	assert content.contains('pub fn TestObject.new(properties TestObjectProperties)')
@@ -104,13 +104,13 @@ fn test_generate_interface() {
 
 	if iface := interface_info {
 		// generate C declarations
-		c_decls := generate_interface_c_method_declarations(iface)
+		c_decls := generate_interface_c_method_declarations(iface, 'Gio')
 
 		// verify C declarations are generated
 		assert c_decls.contains('fn C.') || c_decls == '' // may have no public methods
 
 		// generate interface methods
-		content := generate_interface_methods(iface, 'ListModel')
+		content := generate_interface_methods(iface, 'ListModel', 'Gio')
 
 		// verify methods are generated
 		assert content.contains('pub fn (obj &ListModel)') || content == ''
@@ -153,7 +153,7 @@ fn test_object_interface_implementations() {
 		object_name := obj.get_name()
 
 		// generate interface implementations
-		content := generate_object_interface_implementations(obj, object_name)
+		content := generate_object_interface_implementations(obj, object_name, 'Gio')
 
 		// verify interface methods are generated if the object implements interfaces
 		n_interfaces := obj.get_n_interfaces()
@@ -244,7 +244,7 @@ fn test_void_pointer_arg_maps_to_voidptr() {
 					for k in 0 .. int(n_args) {
 						arg := method.get_arg(u32(k)) or { continue }
 						if arg.get_name() == 'data' {
-							v_type := arg.get_v_type()
+							v_type := arg.get_v_type('GObject')
 							assert v_type == 'voidptr', 'gpointer arg should map to voidptr, got: ${v_type}'
 						}
 						arg.free()
@@ -285,7 +285,7 @@ fn test_generate_properties_struct_no_props() {
 	assert object_info != none
 	obj := object_info or { panic('unreachable') }
 
-	content := generate_properties_struct(obj, 'Object', '', '')
+	content := generate_properties_struct(obj, 'Object', '', '', 'GObject')
 
 	assert content.contains('@[params]')
 	assert content.contains('pub struct ObjectProperties {')
@@ -318,7 +318,7 @@ fn test_generate_properties_struct_with_parent() {
 	assert object_info != none
 	obj := object_info or { panic('unreachable') }
 
-	content := generate_properties_struct(obj, 'ChildObject', 'Object', 'Object')
+	content := generate_properties_struct(obj, 'ChildObject', 'Object', 'Object', 'GObject')
 
 	assert content.contains('pub struct ChildObjectProperties {')
 	assert content.contains('\tObjectProperties')
@@ -370,7 +370,7 @@ fn test_generate_properties_struct_writable_props() {
 		return
 	}
 
-	content := generate_properties_struct(app, 'Application', '', '')
+	content := generate_properties_struct(app, 'Application', '', '', 'Gio')
 
 	assert content.contains('@[params]')
 	assert content.contains('pub struct ApplicationProperties {')
@@ -403,7 +403,7 @@ fn test_generate_object_set_properties_no_props() {
 	assert object_info != none
 	obj := object_info or { panic('unreachable') }
 
-	content := generate_object_set_properties(obj, 'Object', '')
+	content := generate_object_set_properties(obj, 'Object', '', 'GObject')
 
 	assert content.contains('pub fn (obj &Object) set_properties(properties ObjectProperties)')
 	assert content.contains('}\n')
@@ -457,7 +457,7 @@ fn test_generate_object_set_properties_with_props() {
 		return
 	}
 
-	content := generate_object_set_properties(app, 'Application', '')
+	content := generate_object_set_properties(app, 'Application', '', 'Gio')
 
 	assert content.contains('pub fn (obj &Application) set_properties(properties ApplicationProperties)')
 	assert content.contains('if value := properties.')
@@ -489,7 +489,7 @@ fn test_generate_property_methods_no_props() {
 	assert object_info != none
 	obj := object_info or { panic('unreachable') }
 
-	content := generate_property_methods(obj, 'Object')
+	content := generate_property_methods(obj, 'Object', 'GObject')
 
 	assert content == ''
 
@@ -528,7 +528,7 @@ fn test_generate_property_methods_with_props() {
 		return
 	}
 
-	content := generate_property_methods(app, 'Application')
+	content := generate_property_methods(app, 'Application', 'Gio')
 
 	// property accessors are only generated when no explicit method already exists;
 	// Gio.Application has explicit get_/set_ methods for all its properties, so
@@ -567,9 +567,7 @@ fn test_generate_object_binding_creates_file() {
 
 	test_dir := os.join_path(os.temp_dir(), 'vgi_obj_binding_test')
 	os.mkdir_all(test_dir) or {}
-	defer {
-		os.rmdir_all(test_dir) or {}
-	}
+	defer { os.rmdir_all(test_dir) or {} }
 
 	generate_object_binding(obj, test_dir)
 
@@ -615,7 +613,7 @@ fn test_application_run_special_case() {
 		return
 	}
 
-	content := generate_object_methods(app, 'Application')
+	content := generate_object_methods(app, 'Application', 'Gio')
 
 	// run() should take no parameters and inject os.args
 	assert content.contains('pub fn (obj &Application) run() int {')
@@ -656,9 +654,7 @@ fn test_generate_enum() {
 		// create temp directory for test
 		test_dir := os.join_path(os.temp_dir(), 'vgi_enum_test')
 		os.mkdir_all(test_dir) or {}
-		defer {
-			os.rmdir_all(test_dir) or {}
-		}
+		defer { os.rmdir_all(test_dir) or {} }
 
 		// generate enum
 		generate_enum_binding(enum_val, test_dir)
