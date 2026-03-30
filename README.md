@@ -33,6 +33,12 @@ import edam.vgi.gtk_4_0 as gtk
 win := gtk.Window.new()
 ```
 
+Or run the example...
+
+``` Shell
+v -d dynamic_boehm run example
+```
+
 Note: compile/run with `-d dynamic_boehm` or V's GC crashes!
 
 # Installing
