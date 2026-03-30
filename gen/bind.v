@@ -71,403 +71,6 @@ pub fn generate_bindings(library string, version string) {
 	println('bindings for ${library}-${version} generated at ${base_module}.${dir_name}')
 }
 
-// generate README.md with binding metadata
-fn generate_readme(binding_dir string, library string, version string, typelib_path string) {
-	readme_path := os.join_path(binding_dir, 'README.md')
-
-	readme_content := 'Library: ${library}
-Version: ${version}
-Typelib: ${typelib_path}
-'
-
-	os.write_file(readme_path, readme_content) or {
-		eprintln('Error: Failed to write README.md')
-		eprintln('${err}')
-		exit(1)
-	}
-}
-
-// return pkg-config name and include path for a library
-fn get_library_c_info(library string, version string) (string, string) {
-	lib_lower := library.to_lower()
-	version_parts := version.split('.')
-	version_major := if version_parts.len > 0 { version_parts[0] } else { '' }
-
-	// hardcoded mappings for known libraries
-	match lib_lower {
-		'glib' {
-			return 'glib-2.0', '<glib.h>'
-		}
-		'gobject' {
-			return 'gobject-2.0', '<glib-object.h>'
-		}
-		'gio' {
-			return 'gio-2.0', '<gio/gio.h>'
-		}
-		'gtk' {
-			if version_major == '4' {
-				return 'gtk4', '<gtk/gtk.h>'
-			} else if version_major == '3' {
-				return 'gtk+-3.0', '<gtk/gtk.h>'
-			}
-			return 'gtk4', '<gtk/gtk.h>'
-		}
-		'gdk' {
-			if version_major == '4' {
-				return 'gtk4', '<gdk/gdk.h>'
-			} else if version_major == '3' {
-				return 'gdk-3.0', '<gdk/gdk.h>'
-			}
-			return 'gtk4', '<gdk/gdk.h>'
-		}
-		'pango' {
-			return 'pango', '<pango/pango.h>'
-		}
-		'pangocairo' {
-			return 'pangocairo', '<pango/pangocairo.h>'
-		}
-		'cairo' {
-			return 'cairo', '<cairo.h>'
-		}
-		'atk' {
-			return 'atk', '<atk/atk.h>'
-		}
-		'gdk-pixbuf', 'gdkpixbuf' {
-			return 'gdk-pixbuf-2.0', '<gdk-pixbuf/gdk-pixbuf.h>'
-		}
-		'gmodule' {
-			return 'gmodule-2.0', '<glib.h>'
-		}
-		'gthread' {
-			return 'gthread-2.0', '<glib.h>'
-		}
-		else {
-			// fallback: use library-version for pkg-config and library/library.h for include
-			pkgconfig_name := '${lib_lower}-${version}'
-			include_path := '<${lib_lower}/${lib_lower}.h>'
-			return pkgconfig_name, include_path
-		}
-	}
-}
-
-// generate C interop file with pkgconfig and includes
-fn generate_compat_c(binding_dir string, library string, version string) {
-	compat_path := os.join_path(binding_dir, 'compat.c.v')
-	module_name := os.file_name(binding_dir)
-
-	pkgconfig_name, include_path := get_library_c_info(library, version)
-
-	content := 'module ${module_name}
-
-#pkgconfig ${pkgconfig_name}
-#include ${include_path}
-
-// C declarations for GObject/GLib functions using voidptr to avoid cross-module type conflicts
-fn C.g_object_get_property(object voidptr, property_name &char, value voidptr)
-fn C.g_object_set_property(object voidptr, property_name &char, value voidptr)
-fn C.g_error_free(error &C.GError)
-
-fn C.g_value_init(value voidptr, g_type u64) voidptr
-fn C.g_value_unset(value voidptr)
-
-@[typedef]
-pub struct C.GError {
-pub:
-	message &char
-}
-
-fn C.g_value_get_boolean(value voidptr) bool
-fn C.g_value_set_boolean(value voidptr, v_boolean bool)
-fn C.g_value_get_schar(value voidptr) i8
-fn C.g_value_set_schar(value voidptr, v_schar i8)
-fn C.g_value_get_uchar(value voidptr) u8
-fn C.g_value_set_uchar(value voidptr, v_uchar u8)
-fn C.g_value_get_int(value voidptr) int
-fn C.g_value_set_int(value voidptr, v_int int)
-fn C.g_value_get_uint(value voidptr) u32
-fn C.g_value_set_uint(value voidptr, v_uint u32)
-fn C.g_value_get_int64(value voidptr) i64
-fn C.g_value_set_int64(value voidptr, v_int64 i64)
-fn C.g_value_get_uint64(value voidptr) u64
-fn C.g_value_set_uint64(value voidptr, v_uint64 u64)
-fn C.g_value_get_float(value voidptr) f32
-fn C.g_value_set_float(value voidptr, v_float f32)
-fn C.g_value_get_double(value voidptr) f64
-fn C.g_value_set_double(value voidptr, v_double f64)
-fn C.g_value_get_string(value voidptr) &char
-fn C.g_value_set_string(value voidptr, v_string &char)
-fn C.g_value_get_pointer(value voidptr) voidptr
-fn C.g_value_set_pointer(value voidptr, v_pointer voidptr)
-
-'
-
-	os.write_file(compat_path, content) or {
-		eprintln('Warning: Failed to write ${compat_path}')
-		return
-	}
-}
-
-// generate helper functions for property access
-fn generate_v_util(binding_dir string) {
-	util_path := os.join_path(binding_dir, 'v_util.v')
-	module_name := os.file_name(binding_dir)
-
-	mut content := 'module ${module_name}
-
-// return a pointer to the shared GError (singleton pattern)
-@[unsafe]
-fn v_get_shared_error() &&C.GError {
-	unsafe {
-		mut static gerror := &C.GError(nil)
-		return &&C.GError(&gerror)
-	}
-}
-
-// check the shared GError and throw if set
-fn v_check_shared_error() ! {
-	gerror_ptr := unsafe { v_get_shared_error() }
-	gerror := unsafe { *gerror_ptr }
-	if gerror != unsafe { nil } {
-		msg := unsafe { cstring_to_vstring(gerror.message) }
-		C.g_error_free(gerror)
-		unsafe { *gerror_ptr = nil }
-		return error(msg)
-	}
-}
-
-// check the shared GError and either return the value or throw
-fn v_check_shared_error_or_return[T](value T) !T {
-	gerror_ptr := unsafe { v_get_shared_error() }
-	gerror := unsafe { *gerror_ptr }
-	if gerror != unsafe { nil } {
-		msg := unsafe { cstring_to_vstring(gerror.message) }
-		C.g_error_free(gerror)
-		unsafe { *gerror_ptr = nil }
-		return error(msg)
-	}
-	return value
-}
-
-// convert a nullable C string to a V string, returning empty string for nil
-fn v_cstring_or_empty(s &char) string {
-	if s == unsafe { nil } { return \'\' }
-	return unsafe { cstring_to_vstring(s) }
-}
-
-// GValue is a C struct we need to allocate. size based on GValue definition (24 bytes on most systems)
-struct GValueBuffer {
-	data [24]u8
-}
-
-// GLib fundamental type IDs (G_TYPE_MAKE_FUNDAMENTAL(n) = n << 2, stable GLib ABI)
-const g_type_char_id = u64(12)
-const g_type_uchar_id = u64(16)
-const g_type_boolean_id = u64(20)
-const g_type_int_id = u64(24)
-const g_type_uint_id = u64(28)
-const g_type_int64_id = u64(40)
-const g_type_uint64_id = u64(44)
-const g_type_float_id = u64(56)
-const g_type_double_id = u64(60)
-const g_type_string_id = u64(64)
-const g_type_pointer_id = u64(68)
-
-// helper functions for property access
-
-fn get_bool_property(obj voidptr, prop_name string) bool {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_boolean_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_boolean(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_bool_property(obj voidptr, prop_name string, val bool) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_boolean_id)
-	C.g_value_set_boolean(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_i8_property(obj voidptr, prop_name string) i8 {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_char_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_schar(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_i8_property(obj voidptr, prop_name string, val i8) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_char_id)
-	C.g_value_set_schar(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_u8_property(obj voidptr, prop_name string) u8 {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_uchar_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_uchar(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_u8_property(obj voidptr, prop_name string, val u8) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_uchar_id)
-	C.g_value_set_uchar(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_int_property(obj voidptr, prop_name string) int {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_int_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_int(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_int_property(obj voidptr, prop_name string, val int) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_int_id)
-	C.g_value_set_int(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_u32_property(obj voidptr, prop_name string) u32 {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_uint_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_uint(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_u32_property(obj voidptr, prop_name string, val u32) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_uint_id)
-	C.g_value_set_uint(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_i64_property(obj voidptr, prop_name string) i64 {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_int64_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_int64(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_i64_property(obj voidptr, prop_name string, val i64) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_int64_id)
-	C.g_value_set_int64(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_u64_property(obj voidptr, prop_name string) u64 {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_uint64_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_uint64(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_u64_property(obj voidptr, prop_name string, val u64) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_uint64_id)
-	C.g_value_set_uint64(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_f32_property(obj voidptr, prop_name string) f32 {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_float_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_float(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_f32_property(obj voidptr, prop_name string, val f32) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_float_id)
-	C.g_value_set_float(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_f64_property(obj voidptr, prop_name string) f64 {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_double_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_double(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_f64_property(obj voidptr, prop_name string, val f64) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_double_id)
-	C.g_value_set_double(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_string_property(obj voidptr, prop_name string) string {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_string_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := unsafe { cstring_to_vstring(C.g_value_get_string(voidptr(&value))) }
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_string_property(obj voidptr, prop_name string, val string) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_string_id)
-	C.g_value_set_string(voidptr(&gvalue), val.str)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-
-fn get_voidptr_property(obj voidptr, prop_name string) voidptr {
-	mut value := GValueBuffer{}
-	C.g_value_init(voidptr(&value), g_type_pointer_id)
-	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
-	result := C.g_value_get_pointer(voidptr(&value))
-	C.g_value_unset(voidptr(&value))
-	return result
-}
-
-fn set_voidptr_property(obj voidptr, prop_name string, val voidptr) {
-	mut gvalue := GValueBuffer{}
-	C.g_value_init(voidptr(&gvalue), g_type_pointer_id)
-	C.g_value_set_pointer(voidptr(&gvalue), val)
-	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
-	C.g_value_unset(voidptr(&gvalue))
-}
-'
-
-	os.write_file(util_path, content) or {
-		eprintln('Warning: Failed to write ${util_path}')
-		return
-	}
-}
-
 // generate V enum/flags from EnumInfo
 fn generate_enum_binding(info EnumInfo, binding_dir string) {
 	enum_name := info.get_name()
@@ -523,19 +126,6 @@ fn generate_enum_binding(info EnumInfo, binding_dir string) {
 	}
 }
 
-// return true if v_type is a named enum/flags type (not a primitive, pointer, or voidptr)
-fn is_enum_v_type(v_type string) bool {
-	return match v_type {
-		'bool', 'string', 'voidptr', 'void', 'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64',
-		'u64', 'f32', 'f64' {
-			false
-		}
-		else {
-			v_type.len > 0 && v_type[0].is_capital() && !v_type.starts_with('&')
-		}
-	}
-}
-
 fn generate_c_method_declaration(method FunctionInfo, namespace string) string {
 	symbol := method.get_symbol()
 	if symbol == '' {
@@ -558,8 +148,8 @@ fn generate_c_method_declaration(method FunctionInfo, namespace string) string {
 
 		if direction == gi_direction_in {
 			arg_name := sanitize_param_name(arg.get_name())
-			arg_type := get_c_type(arg.get_v_type(namespace))
-			c_params << '${arg_name} ${arg_type}'
+			arg_vtype := arg.get_v_type(namespace)
+			c_params << '${arg_name} ${arg_vtype.to_c_type()}'
 		}
 
 		arg.free()
@@ -572,13 +162,13 @@ fn generate_c_method_declaration(method FunctionInfo, namespace string) string {
 
 	// get return type
 	return_type_info := method.get_return_type()
-	return_v_type := return_type_info.to_v_type(namespace)
+	return_vtype := return_type_info.to_v_type(namespace)
 	return_type_info.free()
 
 	skip_return := method.skip_return()
 
 	// generate function signature
-	return_sig := get_c_return_sig(return_v_type, skip_return)
+	return_sig := return_vtype.to_c_return_sig(skip_return)
 	return if return_sig.len == 0 {
 		'fn C.${symbol}(${c_params.join(', ')})\n'
 	} else {
@@ -586,57 +176,92 @@ fn generate_c_method_declaration(method FunctionInfo, namespace string) string {
 	}
 }
 
+// generate C function declarations for a slice of methods
+fn generate_c_declarations(methods []FunctionInfo, namespace string) string {
+	mut content := ''
+	for method in methods {
+		content += generate_c_method_declaration(method, namespace)
+	}
+	return content
+}
 
-// return a zero/nil literal for a V type, used as a default when a constructor
-// arg has no matching property in the properties struct
-fn default_value_for_type(v_type string) string {
-	return match v_type {
-		'bool' { 'false' }
-		'string' { "''" }
-		'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64', 'u64' { '0' }
-		'f32', 'f64' { '0.0' }
-		'voidptr' { 'unsafe { nil }' }
-		else {
-			if v_type.starts_with('&') { 'unsafe { nil }' } else { 'unsafe { ${v_type}(0) }' } // enum/flags
+// generate V method bindings for a slice of FunctionInfo.
+// struct_name is the receiver type (e.g. "Application").
+// skip_names: method names (snake_case) to skip — used to avoid duplicate
+// interface method implementations on objects.
+// Note: does NOT free items in methods — caller is responsible.
+fn generate_methods(methods []FunctionInfo, struct_name string, namespace string, skip_names map[string]bool) string {
+	mut content := ''
+	for method in methods {
+		method_name := method.get_name()
+		if method.is_constructor() { continue }
+		if method_name.starts_with('_') { continue }
+		symbol := method.get_symbol()
+		if symbol == '' { continue }
+		// skip low-level property methods (we generate typed accessors instead)
+		if symbol == 'g_object_get_property' || symbol == 'g_object_set_property' { continue }
+		v_method_name := method_name.replace('-', '_')
+		if v_method_name in skip_names { continue }
+
+		// special case: g_application_run - auto-inject os.args
+		if symbol == 'g_application_run' {
+			content += 'pub fn (obj &${struct_name}) ${v_method_name}() int {\n'
+			content += '\targs_c := os.args.map(it.str)\n'
+			content += '\treturn C.${symbol}(obj.ptr, os.args.len, voidptr(args_c.data))\n'
+			content += '}\n\n'
+			continue
 		}
-	}
-}
 
-fn get_c_type(v_type string) string {
-	return match v_type {
-		'string' { '&char' }
-		'bool' { 'bool' }
-		'void', 'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64', 'u64', 'f32', 'f64' { v_type }
-		'i32' { 'int' }
-		'voidptr' { 'voidptr' }
-		else {
-			if v_type.starts_with('&') { 'voidptr' } else { 'int' } // enum/flags type names
+		mut params := []string{}
+		mut call_args := []string{}
+		n_args := method.get_n_args()
+
+		for j in 0 .. int(n_args) {
+			arg := method.get_arg(u32(j)) or { continue }
+			arg_name := sanitize_param_name(arg.get_name())
+			arg_vtype := arg.get_v_type(namespace)
+			direction := arg.get_direction()
+
+			if direction == gi_direction_in {
+				params << '${arg_name} ${arg_vtype.name}'
+				call_arg := if arg_vtype.name == 'string' {
+					'${arg_name}.str'
+				} else if arg_vtype.is_enum {
+					'int(${arg_name})'
+				} else {
+					arg_name
+				}
+				call_args << call_arg
+			}
+
+			arg.free()
 		}
+
+		param_list := params.join(', ')
+		return_type_info := method.get_return_type()
+		return_vtype := return_type_info.to_v_type(namespace)
+		return_type_info.free()
+
+		skip_return := method.skip_return() || return_vtype.name == 'void'
+		can_throw := method.can_throw_gerror()
+		may_null := method.may_return_null()
+
+		return_sig := return_vtype.to_v_return_sig(can_throw, may_null, skip_return)
+		content += 'pub fn (obj &${struct_name}) ${v_method_name}(${param_list}) ${return_sig} {\n'
+		content += generate_method_body(symbol, 'obj.ptr', call_args, return_vtype, can_throw,
+			may_null, skip_return)
+		content += '}\n\n'
 	}
+	return content
 }
 
-fn get_c_return_sig(v_type string, skip_return bool) string {
-	return if skip_return || v_type == 'void' { '' } else { get_c_type(v_type) }
-}
-
-fn get_v_return_sig(v_type string, can_error bool, may_null bool, skip_return bool) string {
-	if skip_return || v_type == 'void' {
-		return if can_error { '!' } else { '' }
-	}
-	is_nullable_type := v_type == 'string' || v_type == 'voidptr' || v_type.starts_with('&')
-	// V does not support !?T — when both can_error and may_null, use !T (nil treated as error)
-	if may_null && is_nullable_type && !can_error {
-		return '?${v_type}'
-	}
-	return if can_error { '!${v_type}' } else { v_type }
-}
 
 // generate the body of a method binding (from C call to return statement)
-fn generate_method_body(symbol string, receiver string, call_args []string, return_v_type string, can_throw bool, may_null bool, skip_return bool) string {
-	needs_string_conv := return_v_type == 'string'
-	needs_enum_cast := is_enum_v_type(return_v_type)
-	is_nullable_type := return_v_type == 'string' || return_v_type == 'voidptr'
-		|| return_v_type.starts_with('&')
+fn generate_method_body(symbol string, receiver string, call_args []string, return_vtype VType, can_throw bool, may_null bool, skip_return bool) string {
+	needs_string_conv := return_vtype.name == 'string'
+	needs_enum_cast := return_vtype.is_enum
+	is_nullable_type := return_vtype.name == 'string' || return_vtype.name == 'voidptr'
+		|| return_vtype.name.starts_with('&')
 	effective_may_null := may_null && is_nullable_type
 	mut content := ''
 
@@ -685,7 +310,7 @@ fn generate_method_body(symbol string, receiver string, call_args []string, retu
 		if needs_string_conv {
 			content += 'unsafe { cstring_to_vstring(C.${symbol}(${receiver}'
 		} else if needs_enum_cast {
-			content += 'unsafe { ${return_v_type}(C.${symbol}(${receiver}'
+			content += 'unsafe { ${return_vtype.name}(C.${symbol}(${receiver}'
 		} else {
 			content += 'C.${symbol}(${receiver}'
 		}

@@ -73,8 +73,8 @@ fn test_object_methods() {
 	// test get_return_type
 	return_type := method.get_return_type()
 	return_v_type := return_type.to_v_type('')
-	println('Return type: ${return_v_type}')
-	assert return_v_type.len > 0
+	println('Return type: ${return_v_type.name}')
+	assert return_v_type.name.len > 0
 	return_type.free()
 
 	// test get_arg if method has arguments
@@ -91,8 +91,8 @@ fn test_object_methods() {
 
 		// test get_v_type
 		arg_v_type := arg.get_v_type('')
-		println('Argument type: ${arg_v_type}')
-		assert arg_v_type.len > 0
+		println('Argument type: ${arg_v_type.name}')
+		assert arg_v_type.name.len > 0
 
 		// test get_direction
 		direction := arg.get_direction()

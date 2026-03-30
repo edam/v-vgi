@@ -2,12 +2,28 @@ module gen
 
 import os
 
+// collect all methods from an ObjectInfo into a slice.
+// caller is responsible for freeing each element.
+fn collect_methods(info ObjectInfo) []FunctionInfo {
+	mut methods := []FunctionInfo{}
+	n := info.get_n_methods()
+	for i in 0 .. int(n) {
+		method := info.get_method(u32(i)) or { continue }
+		methods << method
+	}
+	return methods
+}
+
 // generate V file for an object
 fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	object_name := info.get_name()
 	file_name := object_name.to_lower() + '.v'
 	file_path := os.join_path(binding_dir, file_name)
 	namespace := info.get_namespace()
+
+	// collect methods once; freed at end via defer
+	methods := collect_methods(info)
+	defer { for m in methods { m.free() } }
 
 	mut content := 'module ${os.file_name(binding_dir)}\n'
 
@@ -35,7 +51,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 		}
 	}
 
-	if object_needs_os_import(info) {
+	if object_needs_os_import(methods) {
 		content += '\nimport os\n'
 	}
 
@@ -48,7 +64,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 	// add C.g_object_new declaration for constructor
 	content += 'fn C.g_object_new(object_type u64, first_property_name &char) voidptr\n'
-	content += generate_object_c_method_declarations(info, namespace)
+	content += generate_c_declarations(methods, namespace)
 	content += '\n'
 
 	// struct with embedded parent (no implements clause)
@@ -62,11 +78,11 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 
 	content += generate_properties_struct(info, object_name, parent_name, parent_embed,
 		namespace)
-	content += generate_object_constructor(info, object_name, parent_name, namespace)
+	content += generate_object_constructor(methods, info, object_name, parent_name, namespace)
 	content += generate_object_set_properties(info, object_name, parent_name, namespace)
 	content += generate_property_methods(info, object_name, namespace)
-	content += generate_object_methods(info, object_name, namespace)
-	content += generate_object_interface_implementations(info, object_name, namespace)
+	content += generate_object_methods(methods, object_name, namespace)
+	content += generate_object_interface_implementations(methods, info, object_name, namespace)
 
 	os.write_file(file_path, content) or {
 		eprintln('Warning: Failed to write ${file_path}')
@@ -74,55 +90,37 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 }
 
-// generate @[params] properties struct
-fn generate_properties_struct(info ObjectInfo, object_name string, parent_name string, parent_embed string, namespace string) string {
-	mut content := '@[params]\n'
-	content += 'pub struct ${object_name}Properties {\n'
-
-	if parent_embed != '' {
-		content += '\t${parent_embed}Properties\n'
-	}
-	content += 'pub:\n'
-
-	// add writable properties only
+// collect writable property field names (sanitized snake_case) for an object and all
+// its ancestors — mirrors exactly what generate_properties_struct puts in the struct
+fn collect_all_property_names(info ObjectInfo) map[string]bool {
+	mut names := map[string]bool{}
 	n_props := info.get_n_properties()
 	for i in 0 .. int(n_props) {
 		prop := info.get_property(u32(i)) or { continue }
-
-		// only include writable properties (can be set in constructor)
-		if !prop.is_writable() {
-			prop.free()
-			continue
+		if prop.is_writable() {
+			names[sanitize_param_name(prop.get_name().replace('-', '_'))] = true
 		}
-
-		prop_name := prop.get_name()
-		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
-		v_type := prop.get_v_type(namespace)
-
-		content += '\t${v_prop_name} ?${v_type}\n'
-
 		prop.free()
 	}
-
-	content += '}\n\n'
-	return content
+	if parent := info.get_parent() {
+		for name, _ in collect_all_property_names(parent) {
+			names[name] = true
+		}
+		parent.free()
+	}
+	return names
 }
 
 // generate Object.new(properties ObjectProperties) constructor.
 // if a specific GI 'new' constructor exists, uses it (pulling args from the properties
 // struct by name); otherwise falls back to the generic g_object_new().
-fn generate_object_constructor(info ObjectInfo, object_name string, parent_name string, namespace string) string {
+fn generate_object_constructor(methods []FunctionInfo, info ObjectInfo, object_name string, parent_name string, namespace string) string {
 	// look for a GI constructor named 'new'
-	n_methods := info.get_n_methods()
-	for i in 0 .. int(n_methods) {
-		method := info.get_method(u32(i)) or { continue }
+	for method in methods {
 		if method.is_constructor() && method.get_name() == 'new' {
-			result := generate_object_gi_constructor(method, info, object_name, parent_name,
+			return generate_object_gi_constructor(method, info, object_name, parent_name,
 				namespace)
-			method.free()
-			return result
 		}
-		method.free()
 	}
 
 	// fall back to g_object_new
@@ -145,27 +143,6 @@ fn generate_object_constructor(info ObjectInfo, object_name string, parent_name 
 	content += '\treturn v_object\n'
 	content += '}\n\n'
 	return content
-}
-
-// collect writable property field names (sanitized snake_case) for an object and all
-// its ancestors — mirrors exactly what generate_properties_struct puts in the struct
-fn collect_all_property_names(info ObjectInfo) map[string]bool {
-	mut names := map[string]bool{}
-	n_props := info.get_n_properties()
-	for i in 0 .. int(n_props) {
-		prop := info.get_property(u32(i)) or { continue }
-		if prop.is_writable() {
-			names[sanitize_param_name(prop.get_name().replace('-', '_'))] = true
-		}
-		prop.free()
-	}
-	if parent := info.get_parent() {
-		for name, _ in collect_all_property_names(parent) {
-			names[name] = true
-		}
-		parent.free()
-	}
-	return names
 }
 
 // generate Object.new(properties ObjectProperties) using a specific GI constructor.
@@ -191,27 +168,27 @@ fn generate_object_gi_constructor(ctor FunctionInfo, info ObjectInfo, object_nam
 		raw_name := arg.get_name()
 		arg_name := sanitize_param_name(raw_name)
 		v_prop_name := sanitize_param_name(raw_name.replace('-', '_'))
-		arg_type := arg.get_v_type(namespace)
+		arg_vtype := arg.get_v_type(namespace)
 		is_enum := arg.is_enum_or_flags()
 
 		if v_prop_name in prop_names {
-			if arg_type == 'string' {
+			if arg_vtype.name == 'string' {
 				// string: pass .str if set, nil if not
 				content += '\t${arg_name} := if val := properties.${v_prop_name} { val.str } else { unsafe { &char(nil) } }\n'
 			} else if is_enum {
 				// enum/flags: cast to int for C call; use if/else to avoid or{} type mismatch
 				content += '\t${arg_name} := if val := properties.${v_prop_name} { int(val) } else { 0 }\n'
 			} else {
-				content += '\t${arg_name} := properties.${v_prop_name} or { ${default_value_for_type(arg_type)} }\n'
+				content += '\t${arg_name} := properties.${v_prop_name} or { ${arg_vtype.default_value()} }\n'
 			}
 		} else {
 			// no matching property — use zero/nil default
-			if arg_type == 'string' {
+			if arg_vtype.name == 'string' {
 				content += '\t${arg_name} := unsafe { &char(nil) }\n'
 			} else if is_enum {
 				content += '\t${arg_name} := 0\n'
 			} else {
-				content += '\t${arg_name} := ${default_value_for_type(arg_type)}\n'
+				content += '\t${arg_name} := ${arg_vtype.default_value()}\n'
 			}
 		}
 
@@ -245,203 +222,15 @@ fn generate_object_gi_constructor(ctor FunctionInfo, info ObjectInfo, object_nam
 	return content
 }
 
-fn generate_object_set_properties(info ObjectInfo, object_name string, parent_name string, namespace string) string {
-	mut content := 'pub fn (obj &${object_name}) set_properties(properties ${object_name}Properties) {\n'
-
-	// set each property if provided using property helpers
-	n_props := info.get_n_properties()
-	for i in 0 .. int(n_props) {
-		prop := info.get_property(u32(i)) or { continue }
-
-		// only writable properties are in the Properties struct
-		if !prop.is_writable() {
-			prop.free()
-			continue
-		}
-
-		prop_name := prop.get_name()
-		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
-		v_type := prop.get_v_type(namespace)
-		helper := prop.get_property_helper_name()
-		// cast enum/flags values to int for the helper function
-		value_expr := if is_enum_v_type(v_type) { 'int(value)' } else { 'value' }
-
-		content += '\tif value := properties.${v_prop_name} {\n'
-		content += '\t\tset_${helper}_property(obj.ptr, \'${prop_name}\', ${value_expr})\n'
-		content += '\t}\n'
-
-		prop.free()
-	}
-
-	content += '}\n\n'
-	return content
-}
-
-// generate property getter/setter methods
-fn generate_property_methods(info ObjectInfo, object_name string, namespace string) string {
-	mut content := ''
-
-	// collect method names to avoid duplicates
-	mut method_names := map[string]bool{}
-	n_methods := info.get_n_methods()
-	for i in 0 .. int(n_methods) {
-		method := info.get_method(u32(i)) or { continue }
-		method_name := method.get_name().replace('-', '_')
-		method_names[method_name] = true
-		method.free()
-	}
-
-	n_props := info.get_n_properties()
-	for i in 0 .. int(n_props) {
-		prop := info.get_property(u32(i)) or { continue }
-		prop_name := prop.get_name()
-		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
-		v_type := prop.get_v_type(namespace)
-		helper := prop.get_property_helper_name()
-
-		// getter if readable and no method exists
-		if prop.is_readable() && 'get_${v_prop_name}' !in method_names {
-			raw_result := 'get_${helper}_property(obj.ptr, \'${prop_name}\')'
-			result_expr := if is_enum_v_type(v_type) { 'unsafe { ${v_type}(${raw_result}) }' } else { raw_result }
-			content += 'pub fn (obj &${object_name}) get_${v_prop_name}() ${v_type} {\n'
-			content += '\treturn ${result_expr}\n'
-			content += '}\n\n'
-		}
-
-		// setter if writable and no method exists
-		if prop.is_writable() && 'set_${v_prop_name}' !in method_names {
-			set_val := if is_enum_v_type(v_type) { 'int(value)' } else { 'value' }
-			content += 'pub fn (obj &${object_name}) set_${v_prop_name}(value ${v_type}) {\n'
-			content += '\tset_${helper}_property(obj.ptr, \'${prop_name}\', ${set_val})\n'
-			content += '}\n\n'
-		}
-
-		prop.free()
-	}
-
-	return content
-}
-
-// generate C function declarations for methods
-fn generate_object_c_method_declarations(info ObjectInfo, namespace string) string {
-	mut content := ''
-
-	n_methods := info.get_n_methods()
-	for i in 0 .. int(n_methods) {
-		method := info.get_method(u32(i)) or { continue }
-		content += generate_c_method_declaration(method, namespace)
-		method.free()
-	}
-
-	return content
-}
-
-// generate object method bindings
-fn generate_object_methods(info ObjectInfo, object_name string, namespace string) string {
-	mut content := ''
-
-	n_methods := info.get_n_methods()
-	for i in 0 .. int(n_methods) {
-		method := info.get_method(u32(i)) or { continue }
-		method_name := method.get_name()
-
-		// skip constructors (generated separately as static funcs)
-		if method.is_constructor() {
-			method.free()
-			continue
-		}
-
-		// skip private methods
-		if method_name.starts_with('_') {
-			method.free()
-			continue
-		}
-
-		symbol := method.get_symbol()
-		if symbol == '' {
-			method.free()
-			continue
-		}
-
-		// skip low-level property methods (we generate typed accessors instead)
-		if symbol == 'g_object_get_property' || symbol == 'g_object_set_property' {
-			method.free()
-			continue
-		}
-
-		// convert kebab-case to snake_case
-		v_method_name := method_name.replace('-', '_')
-
-		// special case: g_application_run - auto-inject os.args
-		if symbol == 'g_application_run' {
-			content += 'pub fn (obj &${object_name}) ${v_method_name}() int {\n'
-			content += '\targs_c := os.args.map(it.str)\n'
-			content += '\treturn C.${symbol}(obj.ptr, os.args.len, voidptr(args_c.data))\n'
-			content += '}\n\n'
-			method.free()
-			continue
-		}
-
-		// build parameter list and call args
-		mut params := []string{}
-		mut call_args := []string{}
-		n_args := method.get_n_args()
-
-		for j in 0 .. int(n_args) {
-			arg := method.get_arg(u32(j)) or { continue }
-			arg_name := sanitize_param_name(arg.get_name())
-			arg_type := arg.get_v_type(namespace)
-			direction := arg.get_direction()
-
-			// only handle 'in' parameters for now
-			if direction == gi_direction_in {
-				params << '${arg_name} ${arg_type}'
-				// convert V value to C value if needed
-				call_arg := if arg_type == 'string' {
-					'${arg_name}.str'
-				} else if is_enum_v_type(arg_type) {
-					'int(${arg_name})'
-				} else {
-					arg_name
-				}
-				call_args << call_arg
-			}
-
-			arg.free()
-		}
-
-		param_list := params.join(', ')
-
-		// get return type
-		return_type_info := method.get_return_type()
-		return_v_type := return_type_info.to_v_type(namespace)
-		return_type_info.free()
-
-		skip_return := method.skip_return() || return_v_type == 'void'
-		can_throw := method.can_throw_gerror()
-		may_null := method.may_return_null()
-
-		// generate method signature
-		return_sig := get_v_return_sig(return_v_type, can_throw, may_null, skip_return)
-		content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_sig} {\n'
-		content += generate_method_body(symbol, 'obj.ptr', call_args, return_v_type, can_throw,
-			may_null, skip_return)
-		content += '}\n\n'
-
-		method.free()
-	}
-
-	return content
+// generate object method bindings (thin wrapper around generate_methods)
+fn generate_object_methods(methods []FunctionInfo, object_name string, namespace string) string {
+	return generate_methods(methods, object_name, namespace, map[string]bool{})
 }
 
 // return true if any method requires import os in the generated binding
-fn object_needs_os_import(info ObjectInfo) bool {
-	n_methods := info.get_n_methods()
-	for i in 0 .. int(n_methods) {
-		method := info.get_method(u32(i)) or { continue }
-		symbol := method.get_symbol()
-		method.free()
-		if symbol == 'g_application_run' {
+fn object_needs_os_import(methods []FunctionInfo) bool {
+	for method in methods {
+		if method.get_symbol() == 'g_application_run' {
 			return true
 		}
 	}
@@ -449,7 +238,7 @@ fn object_needs_os_import(info ObjectInfo) bool {
 }
 
 // generate interface method implementations on an object
-fn generate_object_interface_implementations(info ObjectInfo, object_name string, namespace string) string {
+fn generate_object_interface_implementations(methods []FunctionInfo, info ObjectInfo, object_name string, namespace string) string {
 	mut content := ''
 
 	n_interfaces := info.get_n_interfaces()
@@ -459,13 +248,9 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 
 	// collect all method names from the object itself to detect collisions
 	mut object_method_names := map[string]bool{}
-	n_object_methods := info.get_n_methods()
-	for i in 0 .. int(n_object_methods) {
-		method := info.get_method(u32(i)) or { continue }
-		method_name := method.get_name()
-		v_method_name := method_name.replace('-', '_')
+	for method in methods {
+		v_method_name := method.get_name().replace('-', '_')
 		object_method_names[v_method_name] = true
-		method.free()
 	}
 
 	// also collect property accessor method names
@@ -492,82 +277,17 @@ fn generate_object_interface_implementations(info ObjectInfo, object_name string
 
 		content += '// ${iface_name} interface methods\n'
 
-		// generate each interface method on the object
-		n_methods := iface.get_n_methods()
-		for j in 0 .. int(n_methods) {
-			method := iface.get_method(u32(j)) or { continue }
-			method_name := method.get_name()
-
-			// skip private methods
-			if method_name.starts_with('_') {
-				method.free()
-				continue
-			}
-
-			symbol := method.get_symbol()
-			if symbol == '' {
-				method.free()
-				continue
-			}
-
-			// convert kebab-case to snake_case
-			v_method_name := method_name.replace('-', '_')
-
-			// skip if object already has a method with this name
-			if v_method_name in object_method_names {
-				method.free()
-				continue
-			}
-
-			// build parameter list and call args
-			mut params := []string{}
-			mut call_args := []string{}
-			n_args := method.get_n_args()
-
-			for k in 0 .. int(n_args) {
-				arg := method.get_arg(u32(k)) or { continue }
-				arg_name := sanitize_param_name(arg.get_name())
-				arg_type := arg.get_v_type(namespace)
-				direction := arg.get_direction()
-
-				// only handle 'in' parameters for now
-				if direction == gi_direction_in {
-					params << '${arg_name} ${arg_type}'
-					// convert V value to C value if needed
-					call_arg := if arg_type == 'string' {
-						'${arg_name}.str'
-					} else if is_enum_v_type(arg_type) {
-						'int(${arg_name})'
-					} else {
-						arg_name
-					}
-					call_args << call_arg
-				}
-
-				arg.free()
-			}
-
-			param_list := params.join(', ')
-
-			// get return type
-			return_type_info := method.get_return_type()
-			return_v_type := return_type_info.to_v_type(namespace)
-			return_type_info.free()
-
-			skip_return := method.skip_return() || return_v_type == 'void'
-			can_throw := method.can_throw_gerror()
-			may_null := method.may_return_null()
-
-			// generate method signature
-			return_sig := get_v_return_sig(return_v_type, can_throw, may_null, skip_return)
-			content += 'pub fn (obj &${object_name}) ${v_method_name}(${param_list}) ${return_sig} {\n'
-			content += generate_method_body(symbol, 'obj.ptr', call_args, return_v_type,
-				can_throw, may_null, skip_return)
-			content += '}\n\n'
-
-			method.free()
+		// collect interface methods; freed at end of this iteration
+		n_iface_methods := iface.get_n_methods()
+		mut iface_methods := []FunctionInfo{}
+		for j in 0 .. int(n_iface_methods) {
+			m := iface.get_method(u32(j)) or { continue }
+			iface_methods << m
 		}
 
+		content += generate_methods(iface_methods, object_name, namespace, object_method_names)
+
+		for m in iface_methods { m.free() }
 		iface.free()
 	}
 

@@ -28,14 +28,17 @@ fn test_generate_object_methods() {
 
 	obj := object_info or { panic('unreachable') }
 
+	methods := collect_methods(obj)
+	defer { for m in methods { m.free() } }
+
 	// generate C declarations
-	c_decls := generate_object_c_method_declarations(obj, 'GObject')
+	c_decls := generate_c_declarations(methods, 'GObject')
 
 	// verify C declarations are generated
 	assert c_decls.contains('fn C.') || c_decls == '' // may have no public methods
 
 	// generate methods
-	content := generate_object_methods(obj, 'TestObject', 'GObject')
+	content := generate_object_methods(methods, 'TestObject', 'GObject')
 
 	// verify generated code contains method definitions
 	assert content.contains('pub fn (obj &TestObject)') || content == '' // may have no public methods
@@ -68,8 +71,11 @@ fn test_generate_object_constructor() {
 
 	obj := object_info or { panic('unreachable') }
 
+	methods := collect_methods(obj)
+	defer { for m in methods { m.free() } }
+
 	// generate constructor
-	content := generate_object_constructor(obj, 'TestObject', 'ParentObject', 'GObject')
+	content := generate_object_constructor(methods, obj, 'TestObject', 'ParentObject', 'GObject')
 
 	// verify constructor signature
 	assert content.contains('pub fn TestObject.new(properties TestObjectProperties)')
@@ -103,14 +109,23 @@ fn test_generate_interface() {
 	}
 
 	if iface := interface_info {
+		// collect interface methods
+		n_iface_methods := iface.get_n_methods()
+		mut iface_methods := []FunctionInfo{}
+		for i in 0 .. int(n_iface_methods) {
+			m := iface.get_method(u32(i)) or { continue }
+			iface_methods << m
+		}
+		defer { for m in iface_methods { m.free() } }
+
 		// generate C declarations
-		c_decls := generate_interface_c_method_declarations(iface, 'Gio')
+		c_decls := generate_c_declarations(iface_methods, 'Gio')
 
 		// verify C declarations are generated
 		assert c_decls.contains('fn C.') || c_decls == '' // may have no public methods
 
 		// generate interface methods
-		content := generate_interface_methods(iface, 'ListModel', 'Gio')
+		content := generate_interface_methods(iface_methods, 'ListModel', 'Gio')
 
 		// verify methods are generated
 		assert content.contains('pub fn (obj &ListModel)') || content == ''
@@ -152,8 +167,11 @@ fn test_object_interface_implementations() {
 	if obj := object_info {
 		object_name := obj.get_name()
 
+		methods := collect_methods(obj)
+		defer { for m in methods { m.free() } }
+
 		// generate interface implementations
-		content := generate_object_interface_implementations(obj, object_name, 'Gio')
+		content := generate_object_interface_implementations(methods, obj, object_name, 'Gio')
 
 		// verify interface methods are generated if the object implements interfaces
 		n_interfaces := obj.get_n_interfaces()
@@ -245,7 +263,7 @@ fn test_void_pointer_arg_maps_to_voidptr() {
 						arg := method.get_arg(u32(k)) or { continue }
 						if arg.get_name() == 'data' {
 							v_type := arg.get_v_type('GObject')
-							assert v_type == 'voidptr', 'gpointer arg should map to voidptr, got: ${v_type}'
+							assert v_type.name == 'voidptr', 'gpointer arg should map to voidptr, got: ${v_type.name}'
 						}
 						arg.free()
 					}
@@ -613,7 +631,10 @@ fn test_application_run_special_case() {
 		return
 	}
 
-	content := generate_object_methods(app, 'Application', 'Gio')
+	methods := collect_methods(app)
+	defer { for m in methods { m.free() } }
+
+	content := generate_object_methods(methods, 'Application', 'Gio')
 
 	// run() should take no parameters and inject os.args
 	assert content.contains('pub fn (obj &Application) run() int {')
@@ -621,7 +642,7 @@ fn test_application_run_special_case() {
 	assert content.contains('C.g_application_run(obj.ptr, os.args.len, voidptr(args_c.data))')
 
 	// os import should be detected
-	assert object_needs_os_import(app)
+	assert object_needs_os_import(methods)
 
 	app.free()
 }

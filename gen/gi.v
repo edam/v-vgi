@@ -227,8 +227,8 @@ pub fn (info PropertyInfo) get_type_info() TypeInfo {
 	}
 }
 
-// return the V type string for the property
-pub fn (info PropertyInfo) get_v_type(namespace string) string {
+// return the V type for the property
+pub fn (info PropertyInfo) get_v_type(namespace string) VType {
 	type_info := info.get_type_info()
 	defer { type_info.free() }
 	return type_info.to_v_type(namespace)
@@ -451,8 +451,8 @@ pub fn (info ArgInfo) may_be_null() bool {
 	return C.gi_arg_info_may_be_null(&C.GIArgInfo(info.ptr))
 }
 
-// return the V type string for the argument
-pub fn (info ArgInfo) get_v_type(namespace string) string {
+// return the V type for the argument
+pub fn (info ArgInfo) get_v_type(namespace string) VType {
 	type_info := info.get_type_info()
 	defer { type_info.free() }
 	return type_info.to_v_type(namespace)
@@ -466,6 +466,59 @@ pub fn (info ArgInfo) is_enum_or_flags() bool {
 	defer { iface.free() }
 	t := iface.get_type()
 	return t == 'enum' || t == 'flags'
+}
+
+// VType holds a resolved V type name and whether it is a named enum/flags type
+pub struct VType {
+pub:
+	name    string
+	is_enum bool
+}
+
+// return the equivalent C type for use in fn C.xxx() declarations
+pub fn (t VType) to_c_type() string {
+	return match t.name {
+		'string' { '&char' }
+		'bool' { 'bool' }
+		'void', 'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64', 'u64', 'f32', 'f64' { t.name }
+		'i32' { 'int' }
+		'voidptr' { 'voidptr' }
+		else {
+			if t.name.starts_with('&') { 'voidptr' } else { 'int' } // enum/flags type names
+		}
+	}
+}
+
+// return the C return sig for fn C.xxx() declarations
+pub fn (t VType) to_c_return_sig(skip_return bool) string {
+	return if skip_return || t.name == 'void' { '' } else { t.to_c_type() }
+}
+
+// return a zero/nil literal for this type, used as default constructor arg
+pub fn (t VType) default_value() string {
+	return match t.name {
+		'bool' { 'false' }
+		'string' { "''" }
+		'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64', 'u64' { '0' }
+		'f32', 'f64' { '0.0' }
+		'voidptr' { 'unsafe { nil }' }
+		else {
+			if t.name.starts_with('&') { 'unsafe { nil }' } else { 'unsafe { ${t.name}(0) }' } // enum/flags
+		}
+	}
+}
+
+// return the V return signature for method bindings
+pub fn (t VType) to_v_return_sig(can_error bool, may_null bool, skip_return bool) string {
+	if skip_return || t.name == 'void' {
+		return if can_error { '!' } else { '' }
+	}
+	is_nullable_type := t.name == 'string' || t.name == 'voidptr' || t.name.starts_with('&')
+	// V does not support !?T — when both can_error and may_null, use !T (nil treated as error)
+	if may_null && is_nullable_type && !can_error {
+		return '?${t.name}'
+	}
+	return if can_error { '!${t.name}' } else { t.name }
 }
 
 // TypeInfo represents a GITypeInfo
@@ -497,14 +550,14 @@ pub fn (info TypeInfo) get_interface_info() ?BaseInfo {
 	}
 }
 
-// converts the type to a V type string for use in generated code.
+// converts the type to a VType for use in generated code.
 // namespace is the GI namespace of the module being generated (e.g. "Gio"),
 // as returned by gi_base_info_get_namespace() — capitalised, not lowercased.
 // used to produce unqualified names for same-namespace enum/flags types.
-pub fn (info TypeInfo) to_v_type(namespace string) string {
+pub fn (info TypeInfo) to_v_type(namespace string) VType {
 	type_tag := info.get_tag()
 	is_pointer := info.is_pointer()
-	base_type := match type_tag {
+	base_name := match type_tag {
 		gi_type_tag_boolean { 'bool' }
 		gi_type_tag_int8 { 'i8' }
 		gi_type_tag_uint8 { 'u8' }
@@ -517,27 +570,27 @@ pub fn (info TypeInfo) to_v_type(namespace string) string {
 		gi_type_tag_float { 'f32' }
 		gi_type_tag_double { 'f64' }
 		gi_type_tag_gtype { 'u64' } // size_t
-		gi_type_tag_void { return if is_pointer { 'voidptr' } else { 'void' } }
-		gi_type_tag_utf8, gi_type_tag_filename { return 'string' }
+		gi_type_tag_void { return if is_pointer { VType{name: 'voidptr'} } else { VType{name: 'void'} } }
+		gi_type_tag_utf8, gi_type_tag_filename { return VType{name: 'string'} }
 		gi_type_tag_interface {
-			iface := info.get_interface_info() or { return 'voidptr' }
+			iface := info.get_interface_info() or { return VType{name: 'voidptr'} }
 			defer { iface.free() }
 			iface_type := iface.get_type()
 			if iface_type == 'enum' || iface_type == 'flags' {
 				iface_name := iface.get_name()
 				iface_ns := iface.get_namespace()
 				if iface_ns == namespace {
-					return iface_name
+					return VType{name: iface_name, is_enum: true}
 				} else {
 					// cross-namespace enum/flags: use int (C-compatible, avoids import)
-					return 'int'
+					return VType{name: 'int'}
 				}
 			}
-			return 'voidptr'
+			return VType{name: 'voidptr'}
 		}
-		else { return 'voidptr' } // arrays, lists, hash tables, etc.
+		else { return VType{name: 'voidptr'} } // arrays, lists, hash tables, etc.
 	}
-	return if is_pointer { '&${base_type}' } else { base_type }
+	return if is_pointer { VType{name: '&${base_name}'} } else { VType{name: base_name} }
 }
 
 // return the GType constant name for code generation
