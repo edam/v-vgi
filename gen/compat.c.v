@@ -66,6 +66,12 @@ fn C.gi_interface_info_get_n_methods(info &C.GIInterfaceInfo) u32
 fn C.gi_interface_info_get_method(info &C.GIInterfaceInfo, n u32) &C.GIFunctionInfo
 fn C.gi_interface_info_get_n_prerequisites(info &C.GIInterfaceInfo) u32
 fn C.gi_interface_info_get_prerequisite(info &C.GIInterfaceInfo, n u32) &C.GIBaseInfo
+fn C.gi_interface_info_get_n_signals(info &C.GIInterfaceInfo) u32
+fn C.gi_interface_info_get_signal(info &C.GIInterfaceInfo, n u32) &C.GISignalInfo
+
+// Signal info functions
+fn C.gi_object_info_get_n_signals(info &C.GIObjectInfo) u32
+fn C.gi_object_info_get_signal(info &C.GIObjectInfo, n u32) &C.GISignalInfo
 
 // Enum info functions
 fn C.gi_enum_info_get_n_values(info &C.GIEnumInfo) u32
@@ -139,6 +145,9 @@ struct C.GIArgInfo {}
 
 @[typedef]
 struct C.GIInterfaceInfo {}
+
+@[typedef]
+struct C.GISignalInfo {}
 
 @[typedef]
 struct C.GIEnumInfo {}

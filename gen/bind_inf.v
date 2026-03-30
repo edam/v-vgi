@@ -10,9 +10,11 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 	module_name := os.file_name(binding_dir)
 	namespace := info.get_namespace()
 
-	// collect interface methods; freed at end via defer
+	// collect interface methods and signals; freed at end via defer
 	methods := info.collect_methods()
 	defer { for m in methods { m.free() } }
+	signals := info.collect_signals()
+	defer { for s in signals { s.free() } }
 
 	mut content := 'module ${module_name}\n\n'
 
@@ -58,6 +60,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 
 	// generate methods on concrete struct (thin wrapper around generate_methods)
 	content += generate_interface_methods(methods, interface_name, namespace)
+	content += generate_signal_bindings(signals, interface_name, namespace)
 
 	os.write_file(file_path, content) or {
 		eprintln('Warning: Failed to write ${file_path}')

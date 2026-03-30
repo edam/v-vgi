@@ -50,6 +50,12 @@ fn test_generated_bindings_integration() {
 			assert false, '${name} failed to compile'
 			return
 		}
+		if result.output.contains('warning:') || result.output.contains('notice:') {
+			eprintln('Warnings/notices in ${name}:')
+			eprintln(result.output)
+			assert false, '${name} produced warnings or notices'
+			return
+		}
 		passed++
 	}
 

@@ -38,6 +38,8 @@ fn C.g_error_free(error &C.GError)
 
 fn C.g_value_init(value voidptr, g_type u64) voidptr
 fn C.g_value_unset(value voidptr)
+fn C.g_signal_connect_data(instance voidptr, detailed_signal &char, c_handler voidptr, data voidptr, destroy_data voidptr, connect_flags int) u64
+fn C.g_signal_handler_disconnect(instance voidptr, handler_id u64)
 
 @[typedef]
 pub struct C.GError {
@@ -418,6 +420,81 @@ fn v_setp_voidptr(obj voidptr, prop_name string, val voidptr) {
 	C.g_value_set_pointer(voidptr(&gvalue), val)
 	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
 	C.g_value_unset(voidptr(&gvalue))
+}
+
+// Signal closure infrastructure.
+// connect_<signal> methods box a V closure and register a trampoline as the C callback.
+// GLib calls the trampoline with (sender, ...extra_params..., user_data); the trampoline
+// ignores everything except user_data, which holds the boxed V closure.
+
+struct VSignalVoidClosure {
+	call fn() @[required]
+}
+
+struct VSignalBoolClosure {
+	call fn() bool @[required]
+}
+
+// destroy notify: frees the closure box when GLib disconnects the signal
+fn v_closure_notify(data voidptr, _closure voidptr) {
+	unsafe { free(data) }
+}
+
+// trampolines: void return, 0-3 extra C parameters (ignored)
+fn v_trampoline_v0(_sender voidptr, user_data voidptr) {
+	box := unsafe { &VSignalVoidClosure(user_data) }
+	box.call()
+}
+
+fn v_trampoline_v1(_sender voidptr, _p1 voidptr, user_data voidptr) {
+	box := unsafe { &VSignalVoidClosure(user_data) }
+	box.call()
+}
+
+fn v_trampoline_v2(_sender voidptr, _p1 voidptr, _p2 voidptr, user_data voidptr) {
+	box := unsafe { &VSignalVoidClosure(user_data) }
+	box.call()
+}
+
+fn v_trampoline_v3(_sender voidptr, _p1 voidptr, _p2 voidptr, _p3 voidptr, user_data voidptr) {
+	box := unsafe { &VSignalVoidClosure(user_data) }
+	box.call()
+}
+
+fn v_trampoline_v4(_sender voidptr, _p1 voidptr, _p2 voidptr, _p3 voidptr, _p4 voidptr, user_data voidptr) {
+	box := unsafe { &VSignalVoidClosure(user_data) }
+	box.call()
+}
+
+fn v_trampoline_v5(_sender voidptr, _p1 voidptr, _p2 voidptr, _p3 voidptr, _p4 voidptr, _p5 voidptr, user_data voidptr) {
+	box := unsafe { &VSignalVoidClosure(user_data) }
+	box.call()
+}
+
+// trampolines: bool return, 0-4 extra C parameters (ignored)
+fn v_trampoline_b0(_sender voidptr, user_data voidptr) bool {
+	box := unsafe { &VSignalBoolClosure(user_data) }
+	return box.call()
+}
+
+fn v_trampoline_b1(_sender voidptr, _p1 voidptr, user_data voidptr) bool {
+	box := unsafe { &VSignalBoolClosure(user_data) }
+	return box.call()
+}
+
+fn v_trampoline_b2(_sender voidptr, _p1 voidptr, _p2 voidptr, user_data voidptr) bool {
+	box := unsafe { &VSignalBoolClosure(user_data) }
+	return box.call()
+}
+
+fn v_trampoline_b3(_sender voidptr, _p1 voidptr, _p2 voidptr, _p3 voidptr, user_data voidptr) bool {
+	box := unsafe { &VSignalBoolClosure(user_data) }
+	return box.call()
+}
+
+fn v_trampoline_b4(_sender voidptr, _p1 voidptr, _p2 voidptr, _p3 voidptr, _p4 voidptr, user_data voidptr) bool {
+	box := unsafe { &VSignalBoolClosure(user_data) }
+	return box.call()
 }
 '
 

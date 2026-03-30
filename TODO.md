@@ -14,7 +14,7 @@ Unit tests live in `gen/*_test.v`. With PKG_CONFIG_PATH set, all tests pass (4 f
 - **bind.v**: `generate_readme`, `generate_compat_c`, `generate_v_util` — integration-tested via bind_test.v.
 - `get_library_c_info`, `get_c_type`, `get_c_return_sig`, `get_v_return_sig` — used but no isolated tests.
 - Edge cases: Cross-namespace imports, error paths, large metadata sets.
-- New features (e.g., nullables, out params) need tests.
+- New features (e.g., signals, arrays, constants) need tests.
 
 Overall: ~75% test coverage (solid on core; room for edges/complex types). Run with `PKG_CONFIG_PATH=... v test .` for full suite.
 
@@ -66,12 +66,12 @@ Still missing full generation:
 
 ## Constructors
 
-- Unified `Object.new(properties ObjectProperties)` constructor generated for all objects.
-- If a GI constructor named `new` exists (`GI_FUNCTION_IS_CONSTRUCTOR`), it is called internally, mapping args from the properties struct by name; remaining properties set via `set_properties()`.
-- Falls back to `g_object_new()` via type_init if no specific GI constructor exists.
-- Non-throwing constructors return `&T` and panic on NULL; throwing constructors return `!&T` and return error on NULL.
-- **Known limitation**: `gi_type_tag_interface` args that resolve to enum/flags types (e.g. `GApplicationFlags`) are declared as `voidptr` in C, causing C compiler type mismatch errors for affected constructors.
-- **Missing**: `G_PARAM_CONSTRUCT_ONLY` properties should be passed to `g_object_new` / the specific constructor rather than set post-construction via `set_properties()`.
+- DONE - Unified `Object.new(properties ObjectProperties)` constructor uses `g_object_new_with_properties()`.
+  - `append_gvalues()` is generated flat (all ancestor + own properties inlined) to avoid cross-module type conflicts.
+  - Named GI constructors (e.g. `gtk_button_new_with_label`) generated as separate static factory functions.
+  - `G_PARAM_CONSTRUCT_ONLY` properties correctly handled (passed at construction time).
+- Non-throwing constructors return `&T` and panic on NULL; throwing named constructors return `!&T` or `?&T`.
+- **Missing**: Objects with no `type_init` generate a panicking stub — rare but affects some abstract types.
 
 ## Type Safety
 
@@ -88,15 +88,15 @@ Still missing full generation:
 2. DONE - Enums and flags - Generated with proper V syntax (@[flag] for flags).
 3. DONE - GError handling - Shared error via `v_check_shared_error()`; ! returns for throwers.
 4. DONE - **Nullable return types** - `may_return_null()` → `?T` (no-throw) or `!T` with nil-as-error (throwing).
-5. DONE - **Constructor functions** - Unified `Object.new(properties)` with GI constructor internally; panic/error on NULL.
-6. **Out parameters** - Common in APIs; handle as mut refs or out structs.
+5. DONE - **Constructor functions** - `Object.new(properties)` via `g_object_new_with_properties()`; named constructors as separate static fns.
+6. DONE - **Out parameters** - gi_direction_out/inout collected as stack vars; returned as tuple alongside main return value.
 
 ## Medium Priority (Needed for real-world usage)
 
-7. **Signals** - Essential for events; add gi_info_type_signal processing.
+7. DONE - **Signals** - `gi_object_info_get_n_signals`/`gi_interface_info_get_n_signals` processed; each signal generates a named callback type and `connect_<signal>` method via `g_signal_connect_data`.
 8. **Arrays** - Map to fixed arrays or slices; track element types.
 9. Lists (GList/GSList) — Generate list helpers or voidptr with length.
-10. **Module-level functions** - Process gi_info_type_function for non-method APIs.
+10. DONE - **Module-level functions** - gi_info_type_function processed in bind.v; generated into `functions.v` per namespace.
 11. **Constants** - Generate const vals from gi_info_type_constant.
 
 ## Low Priority (Nice to have)

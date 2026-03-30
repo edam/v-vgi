@@ -33,6 +33,8 @@ import edam.vgi.gtk_4_0 as gtk
 win := gtk.Window.new()
 ```
 
+Note: compile/run with `-d dynamic_boehm` or V's GC crashes!
+
 # Installing
 
 1. Install vgi
@@ -108,4 +110,16 @@ properties can also be specified via a named properties struct in `new()`:
 obj1 := Object.new() // no properties specified
 obj1.set_some_property('foo')
 obj2 := Object.new(some_property: 'foo') // also works
+```
+
+### Signals
+
+Connect signals with dedicated methods.
+
+``` V
+my_app.connect_activate(my_app.on_activate)
+
+fn (a MyApp) on_activate() {
+	println("activated!")
+}
 ```

@@ -9,9 +9,11 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	file_path := os.join_path(binding_dir, file_name)
 	namespace := info.get_namespace()
 
-	// collect methods once; freed at end via defer
+	// collect methods and signals once; freed at end via defer
 	methods := info.collect_methods()
 	defer { for m in methods { m.free() } }
+	signals := info.collect_signals()
+	defer { for s in signals { s.free() } }
 
 	mut content := 'module ${os.file_name(binding_dir)}\n'
 
@@ -70,6 +72,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	content += generate_property_methods(info, object_name, namespace)
 	content += generate_object_methods(methods, object_name, namespace)
 	content += generate_object_interface_implementations(methods, info, object_name, namespace)
+	content += generate_signal_bindings(signals, object_name, namespace)
 
 	os.write_file(file_path, content) or {
 		eprintln('Warning: Failed to write ${file_path}')

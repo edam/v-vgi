@@ -202,6 +202,35 @@ pub fn (info ObjectInfo) get_interface(n u32) ?InterfaceInfo {
 	}
 }
 
+// return the number of signals
+pub fn (info ObjectInfo) get_n_signals() u32 {
+	return C.gi_object_info_get_n_signals(&C.GIObjectInfo(info.ptr))
+}
+
+// return signal info at index
+pub fn (info ObjectInfo) get_signal(n u32) ?SignalInfo {
+	sig_ptr := C.gi_object_info_get_signal(&C.GIObjectInfo(info.ptr), n)
+	if sig_ptr == unsafe { nil } {
+		return none
+	}
+	return SignalInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(sig_ptr)
+		}
+	}
+}
+
+// collect all signals; caller is responsible for freeing each element
+pub fn (info ObjectInfo) collect_signals() []SignalInfo {
+	mut signals := []SignalInfo{}
+	n := info.get_n_signals()
+	for i in 0 .. int(n) {
+		sig := info.get_signal(u32(i)) or { continue }
+		signals << sig
+	}
+	return signals
+}
+
 // return the type initialization function name
 pub fn (info ObjectInfo) get_type_init() string {
 	type_init := C.gi_registered_type_info_get_type_init_function_name(&C.GIRegisteredTypeInfo(info.ptr))
@@ -414,6 +443,73 @@ pub fn (info InterfaceInfo) get_prerequisite(n u32) ?BaseInfo {
 	return BaseInfo{
 		ptr: prereq_ptr
 	}
+}
+
+// return the number of signals
+pub fn (info InterfaceInfo) get_n_signals() u32 {
+	return C.gi_interface_info_get_n_signals(&C.GIInterfaceInfo(info.ptr))
+}
+
+// return signal info at index
+pub fn (info InterfaceInfo) get_signal(n u32) ?SignalInfo {
+	sig_ptr := C.gi_interface_info_get_signal(&C.GIInterfaceInfo(info.ptr), n)
+	if sig_ptr == unsafe { nil } {
+		return none
+	}
+	return SignalInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(sig_ptr)
+		}
+	}
+}
+
+// collect all signals; caller is responsible for freeing each element
+pub fn (info InterfaceInfo) collect_signals() []SignalInfo {
+	mut signals := []SignalInfo{}
+	n := info.get_n_signals()
+	for i in 0 .. int(n) {
+		sig := info.get_signal(u32(i)) or { continue }
+		signals << sig
+	}
+	return signals
+}
+
+// SignalInfo represents a GISignalInfo (subtype of GICallableInfo)
+pub struct SignalInfo {
+	BaseInfo
+}
+
+// return the number of arguments (not including sender or user_data)
+pub fn (info SignalInfo) get_n_args() u32 {
+	return C.gi_callable_info_get_n_args(&C.GICallableInfo(info.ptr))
+}
+
+// return argument info at index
+pub fn (info SignalInfo) get_arg(n u32) ?ArgInfo {
+	arg_ptr := C.gi_callable_info_get_arg(&C.GICallableInfo(info.ptr), n)
+	if arg_ptr == unsafe { nil } {
+		return none
+	}
+	return ArgInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(arg_ptr)
+		}
+	}
+}
+
+// return the return type info
+pub fn (info SignalInfo) get_return_type() TypeInfo {
+	type_ptr := C.gi_callable_info_get_return_type(&C.GICallableInfo(info.ptr))
+	return TypeInfo{
+		BaseInfo: BaseInfo{
+			ptr: &C.GIBaseInfo(type_ptr)
+		}
+	}
+}
+
+// return true if return value should be skipped
+pub fn (info SignalInfo) skip_return() bool {
+	return C.gi_callable_info_skip_return(&C.GICallableInfo(info.ptr))
 }
 
 // EnumInfo represents a GIEnumInfo (enums and flags)
