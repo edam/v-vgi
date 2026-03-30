@@ -12,8 +12,8 @@ fn generate_c_method_declaration(method FunctionInfo, namespace string) string {
 		return ''
 	}
 
-	// build C parameter list (constructors have no receiver)
-	mut c_params := if method.is_constructor() { []string{} } else { ['obj voidptr'] }
+	// build C parameter list (methods have a receiver; constructors and free functions do not)
+	mut c_params := if !method.is_constructor() && method.is_method() { ['obj voidptr'] } else { []string{} }
 	n_args := method.get_n_args()
 
 	for j in 0 .. int(n_args) {
@@ -88,16 +88,18 @@ fn collect_method_params(method FunctionInfo, namespace string) ([]string, []str
 }
 
 // build the C call expression: C.symbol(receiver, args..., optional_error_arg)
+// receiver is none for free functions and static-style interface methods.
 // in_unsafe: true when the call appears inside an `unsafe {}` block (skips extra wrapper)
-fn build_c_call(symbol string, receiver string, call_args []string, can_throw bool, in_unsafe bool) string {
-	mut s := 'C.${symbol}(${receiver}'
-	if call_args.len > 0 {
-		s += ', ${call_args.join(', ')}'
+fn build_c_call(symbol string, receiver ?string, call_args []string, can_throw bool, in_unsafe bool) string {
+	mut all_args := []string{}
+	if r := receiver {
+		all_args << r
 	}
+	all_args << call_args
 	if can_throw {
-		s += if in_unsafe { ', v_get_shared_error()' } else { ', unsafe { v_get_shared_error() }' }
+		all_args << if in_unsafe { 'v_get_shared_error()' } else { 'unsafe { v_get_shared_error() }' }
 	}
-	return s + ')'
+	return 'C.${symbol}(${all_args.join(', ')})'
 }
 
 // generate V method bindings for a slice of FunctionInfo.
@@ -139,8 +141,9 @@ fn generate_methods(methods []FunctionInfo, struct_name string, namespace string
 		may_null := method.may_return_null()
 
 		return_sig := return_vtype.to_v_return_sig(can_throw, may_null, skip_return)
+		receiver := if method.is_method() { ?string('obj.ptr') } else { none }
 		content += 'pub fn (obj &${struct_name}) ${v_method_name}(${param_list}) ${return_sig} {\n'
-		content += generate_method_body(symbol, 'obj.ptr', call_args, return_vtype, can_throw,
+		content += generate_method_body(symbol, receiver, call_args, return_vtype, can_throw,
 			may_null, skip_return)
 		content += '}\n\n'
 	}
@@ -148,7 +151,7 @@ fn generate_methods(methods []FunctionInfo, struct_name string, namespace string
 }
 
 // generate the body of a method binding (from C call to return statement)
-fn generate_method_body(symbol string, receiver string, call_args []string, return_vtype VType, can_throw bool, may_null bool, skip_return bool) string {
+fn generate_method_body(symbol string, receiver ?string, call_args []string, return_vtype VType, can_throw bool, may_null bool, skip_return bool) string {
 	needs_string_conv := return_vtype.name == 'string'
 	needs_enum_cast := return_vtype.is_enum
 	is_nullable_type := return_vtype.name == 'string' || return_vtype.name == 'voidptr'

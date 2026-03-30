@@ -41,30 +41,24 @@ pub fn generate_bindings(library string, version string) {
 	generate_v_util(binding_dir)
 	generate_compat_c(binding_dir, library, loaded_version)
 
-	// generate object and interface bindings
+	// generate object, interface, enum, and function bindings
 	n_infos := repo.get_n_infos(library)
+	mut functions := []FunctionInfo{}
 
 	for i in 0 .. int(n_infos) {
 		info := repo.get_info(library, i) or { continue }
+		defer { info.free() }
 
 		match info.get_type() {
-			'object' {
-				object_info := info.as_object_info()
-				generate_object_binding(object_info, binding_dir)
-			}
-			'interface' {
-				interface_info := info.as_interface_info()
-				generate_interface_binding(interface_info, binding_dir)
-			}
-			'enum', 'flags' {
-				enum_info := info.as_enum_info()
-				generate_enum_binding(enum_info, binding_dir)
-			}
+			'object' { generate_object_binding(info.as_object_info(), binding_dir) }
+			'interface' { generate_interface_binding(info.as_interface_info(), binding_dir) }
+			'enum', 'flags' { generate_enum_binding(info.as_enum_info(), binding_dir) }
+			'function' { functions << FunctionInfo.from_info(info) }
 			else {}
 		}
-
-		info.free()
 	}
+
+	generate_function_bindings(binding_dir, library, functions)
 
 	module_parts := @MOD.split('.')
 	base_module := module_parts[..module_parts.len - 1].join('.')

@@ -335,7 +335,14 @@ pub fn (info FunctionInfo) can_throw_gerror() bool {
 }
 
 // GIFunctionInfoFlags
+const gi_function_is_method = u32(1 << 0)
 const gi_function_is_constructor = u32(1 << 1)
+
+// return true if function is an instance method (has a self/receiver arg)
+pub fn (info FunctionInfo) is_method() bool {
+	flags := C.gi_function_info_get_flags(&C.GIFunctionInfo(info.ptr))
+	return (flags & gi_function_is_method) != 0
+}
 
 // return true if function is a constructor (static factory, no self arg)
 pub fn (info FunctionInfo) is_constructor() bool {
@@ -412,6 +419,15 @@ pub fn (info InterfaceInfo) get_prerequisite(n u32) ?BaseInfo {
 // EnumInfo represents a GIEnumInfo (enums and flags)
 pub struct EnumInfo {
 	BaseInfo
+}
+
+// creates a FunctionInfo from a BaseInfo, taking a new reference.
+// the caller remains responsible for freeing the original BaseInfo.
+pub fn FunctionInfo.from_info(info BaseInfo) FunctionInfo {
+	C.gi_base_info_ref(info.ptr)
+	return FunctionInfo{
+		BaseInfo: info
+	}
 }
 
 // casts BaseInfo to EnumInfo
