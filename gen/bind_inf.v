@@ -11,12 +11,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 	namespace := info.get_namespace()
 
 	// collect interface methods; freed at end via defer
-	n_methods := info.get_n_methods()
-	mut methods := []FunctionInfo{}
-	for i in 0 .. int(n_methods) {
-		m := info.get_method(u32(i)) or { continue }
-		methods << m
-	}
+	methods := info.collect_methods()
 	defer { for m in methods { m.free() } }
 
 	mut content := 'module ${module_name}\n\n'
@@ -39,19 +34,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 		v_method_name := method_name.replace('-', '_')
 
 		// build parameter list
-		mut params := []string{}
-		n_args := method.get_n_args()
-		for j in 0 .. int(n_args) {
-			arg := method.get_arg(u32(j)) or { continue }
-			direction := arg.get_direction()
-			if direction == gi_direction_in {
-				arg_name := sanitize_param_name(arg.get_name())
-				arg_vtype := arg.get_v_type(namespace)
-				params << '${arg_name} ${arg_vtype.name}'
-			}
-			arg.free()
-		}
-
+		params, _ := collect_method_params(method, namespace)
 		param_list := params.join(', ')
 
 		// get return type

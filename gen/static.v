@@ -2,58 +2,6 @@ module gen
 
 import os
 
-struct LibraryCInfo {
-	pkg_config string
-	include    string
-}
-
-fn library_c_info_map() map[string]LibraryCInfo {
-	return {
-		'glib':       LibraryCInfo{'glib-2.0', '<glib.h>'}
-		'gobject':    LibraryCInfo{'gobject-2.0', '<glib-object.h>'}
-		'gio':        LibraryCInfo{'gio-2.0', '<gio/gio.h>'}
-		'pango':      LibraryCInfo{'pango', '<pango/pango.h>'}
-		'pangocairo': LibraryCInfo{'pangocairo', '<pango/pangocairo.h>'}
-		'cairo':      LibraryCInfo{'cairo', '<cairo.h>'}
-		'atk':        LibraryCInfo{'atk', '<atk/atk.h>'}
-		'gdk-pixbuf': LibraryCInfo{'gdk-pixbuf-2.0', '<gdk-pixbuf/gdk-pixbuf.h>'}
-		'gdkpixbuf':  LibraryCInfo{'gdk-pixbuf-2.0', '<gdk-pixbuf/gdk-pixbuf.h>'}
-		'gmodule':    LibraryCInfo{'gmodule-2.0', '<glib.h>'}
-		'gthread':    LibraryCInfo{'gthread-2.0', '<glib.h>'}
-	}
-}
-
-// return pkg-config name and include path for a library
-fn get_library_c_info(library string, version string) (string, string) {
-	lib_lower := library.to_lower()
-	version_parts := version.split('.')
-	version_major := if version_parts.len > 0 { version_parts[0] } else { '' }
-
-	// gtk and gdk have version-dependent pkg-config names
-	if lib_lower == 'gtk' {
-		if version_major == '3' {
-			return 'gtk+-3.0', '<gtk/gtk.h>'
-		}
-		return 'gtk4', '<gtk/gtk.h>'
-	}
-	if lib_lower == 'gdk' {
-		if version_major == '3' {
-			return 'gdk-3.0', '<gdk/gdk.h>'
-		}
-		return 'gtk4', '<gdk/gdk.h>'
-	}
-
-	info_map := library_c_info_map()
-	if info := info_map[lib_lower] {
-		return info.pkg_config, info.include
-	}
-
-	// fallback: use library-version for pkg-config and library/library.h for include
-	pkgconfig_name := '${lib_lower}-${version}'
-	include_path := '<${lib_lower}/${lib_lower}.h>'
-	return pkgconfig_name, include_path
-}
-
 // generate README.md with binding metadata
 fn generate_readme(binding_dir string, library string, version string, typelib_path string) {
 	readme_path := os.join_path(binding_dir, 'README.md')

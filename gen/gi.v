@@ -173,6 +173,17 @@ pub fn (info ObjectInfo) get_method(n u32) ?FunctionInfo {
 	}
 }
 
+// collect all methods; caller is responsible for freeing each element
+pub fn (info ObjectInfo) collect_methods() []FunctionInfo {
+	mut methods := []FunctionInfo{}
+	n := info.get_n_methods()
+	for i in 0 .. int(n) {
+		method := info.get_method(u32(i)) or { continue }
+		methods << method
+	}
+	return methods
+}
+
 // return the number of interfaces implemented
 pub fn (info ObjectInfo) get_n_interfaces() u32 {
 	return C.gi_object_info_get_n_interfaces(&C.GIObjectInfo(info.ptr))
@@ -363,6 +374,17 @@ pub fn (info InterfaceInfo) get_method(n u32) ?FunctionInfo {
 			ptr: &C.GIBaseInfo(method_ptr)
 		}
 	}
+}
+
+// collect all methods; caller is responsible for freeing each element
+pub fn (info InterfaceInfo) collect_methods() []FunctionInfo {
+	mut methods := []FunctionInfo{}
+	n := info.get_n_methods()
+	for i in 0 .. int(n) {
+		method := info.get_method(u32(i)) or { continue }
+		methods << method
+	}
+	return methods
 }
 
 // return the number of prerequisites (parent interfaces)

@@ -28,7 +28,7 @@ fn test_generate_object_methods() {
 
 	obj := object_info or { panic('unreachable') }
 
-	methods := collect_methods(obj)
+	methods := obj.collect_methods()
 	defer { for m in methods { m.free() } }
 
 	// generate C declarations
@@ -71,7 +71,7 @@ fn test_generate_object_constructor() {
 
 	obj := object_info or { panic('unreachable') }
 
-	methods := collect_methods(obj)
+	methods := obj.collect_methods()
 	defer { for m in methods { m.free() } }
 
 	// generate constructor
@@ -167,7 +167,7 @@ fn test_object_interface_implementations() {
 	if obj := object_info {
 		object_name := obj.get_name()
 
-		methods := collect_methods(obj)
+		methods := obj.collect_methods()
 		defer { for m in methods { m.free() } }
 
 		// generate interface implementations
@@ -631,7 +631,7 @@ fn test_application_run_special_case() {
 		return
 	}
 
-	methods := collect_methods(app)
+	methods := app.collect_methods()
 	defer { for m in methods { m.free() } }
 
 	content := generate_object_methods(methods, 'Application', 'Gio')

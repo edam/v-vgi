@@ -102,7 +102,7 @@ import edam.vgi.gtk_4_0 as gtk
 Objects map to V struct types.  Use Object.new() to create.
 
 As well as defining `set_` and `get_` functions for properties, object
-properties can also be specified via a `[params]` struct in `new()`:
+properties can also be specified via a named properties struct in `new()`:
 
 ``` V
 obj1 := Object.new() // no properties specified

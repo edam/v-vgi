@@ -14,12 +14,15 @@ The module generates V binding code dynamically based on GObject introspection d
 
 - **gi.vsh**: V script that regenerates bindings for a specified GObject library and version. This is the main code generation tool.
 - **gen/** subdirectory: Contains the code generation logic
-  - **gen/util.v**: Utility functions — `get_vmod_path()` resolves paths relative to the module root; `sanitize_param_name()` escapes V keywords used as parameter names; `get_binding_dir_name()` converts library name/version to directory name (e.g. `Gtk 4.0` → `gtk_4_0`)
+  - **gen/util.v**: Utility functions — `get_vmod_path()` resolves paths relative to the module root; `sanitize_param_name()` escapes V keywords (defined in `v_keywords` const array); `get_binding_dir_name()` converts library name/version to directory name (e.g. `Gtk 4.0` → `gtk_4_0`); `LibraryCInfo` and `get_library_c_info()` for pkg-config/include metadata
   - **gen/compat.c.v**: C interop layer defining libgirepository-2.0 C function bindings and types. Uses `#pkgconfig` to link with girepository.
-  - **gen/gi.v**: V wrapper API for GObject introspection, providing `Repository` struct and methods to query typelib metadata
-  - **gen/bind.v**: Top-level binding orchestration — iterates namespace entries and delegates to type-specific generators; also generates shared helper files (`compat.c.v`, `v_util.v`, `README.md`) and enum/flags bindings
-  - **gen/bind_obj.v**: Object binding generation — structs, constructors, property accessors, methods, and interface method implementations on objects
+  - **gen/gi.v**: V wrapper API for GObject introspection — `Repository`, `ObjectInfo`, `InterfaceInfo`, `FunctionInfo`, `ArgInfo`, `TypeInfo`, `VType` etc. `ObjectInfo` and `InterfaceInfo` both have `collect_methods()` to gather all methods into a slice.
+  - **gen/bind.v**: Pure orchestration — loads the library, creates the output directory, calls static file generators and type-specific binding generators
+  - **gen/bind_obj.v**: Object binding generation — structs, constructors (`generate_ctor_arg_decl()` for the 6-branch arg declaration logic), property accessors, methods, and interface method implementations on objects
   - **gen/bind_inf.v**: Interface binding generation — generates a V interface `IFoo` and a concrete wrapper struct `Foo` (with a `ptr voidptr` field) with method implementations
+  - **gen/bind_enum.v**: Enum/flags binding generation — generates `pub enum Foo` with explicit values (enums) or `@[flag]` (flags)
+  - **gen/codegen.v**: Shared method/function code generation helpers — `collect_method_params()` extracts parameter and call-arg lists from a `FunctionInfo`; `build_c_call()` assembles the C call expression; `generate_c_declarations()`, `generate_methods()`, `generate_method_body()`
+  - **gen/static.v**: Static boilerplate file generators — `generate_readme()`, `generate_compat_c()`, `generate_v_util()` write the fixed support files into each generated binding directory
 - **v.mod**: Module definition declaring the `vgi` module with dependency on `edam.ggetopt`
 
 ### Key Architectural Pattern
@@ -127,7 +130,7 @@ gi.vsh uses the `edam.ggetopt` module for option parsing with a declarative opti
 
 ### Code Generation Context
 
-When working on binding generation (gen/bind*.v files), remember:
+When working on binding generation (`bind.v`, `bind_obj.v`, `bind_inf.v`, `bind_enum.v`, `codegen.v`, `static.v`), remember:
 1. Query libgirepository for type information
 2. Map GObject types to V types
 3. Generate valid V syntax for structs, functions, and method bindings
@@ -143,7 +146,9 @@ GObject introspection types are mapped to V types:
 - `GI_TYPE_TAG_FLOAT/DOUBLE` → `f32/f64`
 - `GI_TYPE_TAG_GTYPE` → `u64`
 - `GI_TYPE_TAG_UTF8/FILENAME` → `string`
-- `GI_TYPE_TAG_INTERFACE` → `voidptr` (TODO: resolve to actual type)
+- `GI_TYPE_TAG_INTERFACE` (enum/flags, same namespace) → named V enum type (e.g. `Align`)
+- `GI_TYPE_TAG_INTERFACE` (enum/flags, cross-namespace) → `int`
+- `GI_TYPE_TAG_INTERFACE` (object/interface/other) → `voidptr`
 - Other complex types → `voidptr` (arrays, lists, etc. not yet implemented)
 
 ### Nullable vs Optional Parameters
@@ -185,7 +190,7 @@ Generated bindings support cross-namespace inheritance by importing dependency b
 - Aim for clear, descriptive test names that explain what is being tested
 - **Always run the full test suite after making changes**: `v -d dynamic_boehm test .`
 - **Do not run gi.vsh multiple times during testing** - it creates directories and generates many files. Use unit tests instead of repeatedly invoking gi.vsh
-- Focus tests on library code (`gen/bind.v`, `gen/bind_obj.v`, `gen/bind_inf.v`, `gen/gi.v`, `gen/util.v`) rather than CLI scripts like `gi.vsh` which are primarily glue code
+- Focus tests on library code (`gen/gi.v`, `gen/util.v`, `gen/bind.v`, `gen/bind_obj.v`, `gen/bind_inf.v`, `gen/bind_enum.v`, `gen/codegen.v`) rather than CLI scripts like `gi.vsh` which are primarily glue code
 
 ### Documentation
 - **Keep AGENTS.md up to date** when making significant changes

@@ -2,18 +2,6 @@ module gen
 
 import os
 
-// collect all methods from an ObjectInfo into a slice.
-// caller is responsible for freeing each element.
-fn collect_methods(info ObjectInfo) []FunctionInfo {
-	mut methods := []FunctionInfo{}
-	n := info.get_n_methods()
-	for i in 0 .. int(n) {
-		method := info.get_method(u32(i)) or { continue }
-		methods << method
-	}
-	return methods
-}
-
 // generate V file for an object
 fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	object_name := info.get_name()
@@ -22,7 +10,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	namespace := info.get_namespace()
 
 	// collect methods once; freed at end via defer
-	methods := collect_methods(info)
+	methods := info.collect_methods()
 	defer { for m in methods { m.free() } }
 
 	mut content := 'module ${os.file_name(binding_dir)}\n'
@@ -145,6 +133,28 @@ fn generate_object_constructor(methods []FunctionInfo, info ObjectInfo, object_n
 	return content
 }
 
+// generate a single constructor arg declaration line.
+// v_prop_name: sanitized snake_case property name to look up in the properties struct (empty = not in props).
+fn generate_ctor_arg_decl(arg_name string, v_prop_name string, arg_vtype VType, is_enum bool, in_props bool) string {
+	if in_props {
+		if arg_vtype.name == 'string' {
+			return '\t${arg_name} := if val := properties.${v_prop_name} { val.str } else { unsafe { &char(nil) } }\n'
+		} else if is_enum {
+			return '\t${arg_name} := if val := properties.${v_prop_name} { int(val) } else { 0 }\n'
+		} else {
+			return '\t${arg_name} := properties.${v_prop_name} or { ${arg_vtype.default_value()} }\n'
+		}
+	} else {
+		if arg_vtype.name == 'string' {
+			return '\t${arg_name} := unsafe { &char(nil) }\n'
+		} else if is_enum {
+			return '\t${arg_name} := 0\n'
+		} else {
+			return '\t${arg_name} := ${arg_vtype.default_value()}\n'
+		}
+	}
+}
+
 // generate Object.new(properties ObjectProperties) using a specific GI constructor.
 // constructor args are pulled from the properties struct by matching name; any not
 // found fall back to a zero/nil default. set_properties() handles the rest.
@@ -171,26 +181,8 @@ fn generate_object_gi_constructor(ctor FunctionInfo, info ObjectInfo, object_nam
 		arg_vtype := arg.get_v_type(namespace)
 		is_enum := arg.is_enum_or_flags()
 
-		if v_prop_name in prop_names {
-			if arg_vtype.name == 'string' {
-				// string: pass .str if set, nil if not
-				content += '\t${arg_name} := if val := properties.${v_prop_name} { val.str } else { unsafe { &char(nil) } }\n'
-			} else if is_enum {
-				// enum/flags: cast to int for C call; use if/else to avoid or{} type mismatch
-				content += '\t${arg_name} := if val := properties.${v_prop_name} { int(val) } else { 0 }\n'
-			} else {
-				content += '\t${arg_name} := properties.${v_prop_name} or { ${arg_vtype.default_value()} }\n'
-			}
-		} else {
-			// no matching property — use zero/nil default
-			if arg_vtype.name == 'string' {
-				content += '\t${arg_name} := unsafe { &char(nil) }\n'
-			} else if is_enum {
-				content += '\t${arg_name} := 0\n'
-			} else {
-				content += '\t${arg_name} := ${arg_vtype.default_value()}\n'
-			}
-		}
+		content += generate_ctor_arg_decl(arg_name, v_prop_name, arg_vtype, is_enum,
+			v_prop_name in prop_names)
 
 		call_args << arg_name
 		arg.free()
