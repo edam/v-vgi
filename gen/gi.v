@@ -228,6 +228,12 @@ pub fn (info PropertyInfo) is_writable() bool {
 	return (flags & gi_property_writable) != 0
 }
 
+// return true if the property is construct-only (can only be set during construction)
+pub fn (info PropertyInfo) is_construct_only() bool {
+	flags := C.gi_property_info_get_flags(&C.GIPropertyInfo(info.ptr))
+	return (flags & gi_property_construct_only) != 0
+}
+
 // return the type information for the property
 pub fn (info PropertyInfo) get_type_info() TypeInfo {
 	type_ptr := C.gi_property_info_get_type_info(&C.GIPropertyInfo(info.ptr))

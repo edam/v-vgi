@@ -79,6 +79,7 @@ fn C.g_error_free(error &C.GError)
 
 // GObject property access
 fn C.g_object_new(object_type u64, first_property_name &char) &C.GObject
+fn C.g_object_new_with_properties(object_type u64, n_properties u32, names &&char, values &C.GValue) voidptr
 fn C.g_object_get_property(object &C.GObject, property_name &char, value &C.GValue)
 fn C.g_object_set_property(object &C.GObject, property_name &char, value &C.GValue)
 
@@ -179,6 +180,7 @@ union C.GIArgument {
 // Property flags
 const gi_property_readable = 1 << 0
 const gi_property_writable = 1 << 1
+const gi_property_construct_only = 1 << 3
 
 // Argument direction
 const gi_direction_in = 0

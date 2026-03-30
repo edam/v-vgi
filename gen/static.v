@@ -31,6 +31,7 @@ fn generate_compat_c(binding_dir string, library string, version string) {
 #include ${include_path}
 
 // C declarations for GObject/GLib functions using voidptr to avoid cross-module type conflicts
+fn C.g_object_new_with_properties(object_type u64, n_properties u32, names &&char, values voidptr) voidptr
 fn C.g_object_get_property(object voidptr, property_name &char, value voidptr)
 fn C.g_object_set_property(object voidptr, property_name &char, value voidptr)
 fn C.g_error_free(error &C.GError)
