@@ -618,3 +618,66 @@ fn test_generate_enum() {
 		eprintln('This is okay if Gio is an older version')
 	}
 }
+
+fn test_object_type_property_uses_concrete_type() {
+	// Gio.Application has 'action-group' property of type GActionGroup (same namespace)
+	// it should generate as ?&ActionGroup, not ?voidptr
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		return
+	}
+
+	n_infos := repo.get_n_infos('Gio')
+	mut app_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Application' {
+			app_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	app := app_info or {
+		eprintln('Gio.Application not found, skipping')
+		return
+	}
+	defer { app.free() }
+
+	content := generate_properties_struct(app, 'Application', '', '', 'Gio')
+	assert content.contains('action_group ?&ActionGroup'), 'expected action_group ?&ActionGroup, got:\n${content}'
+}
+
+fn test_object_type_property_constructor_uses_ptr() {
+	// constructor gvalue append for a same-namespace object property should use val.ptr
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		return
+	}
+
+	n_infos := repo.get_n_infos('Gio')
+	mut app_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Application' {
+			app_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	app := app_info or {
+		eprintln('Gio.Application not found, skipping')
+		return
+	}
+	defer { app.free() }
+
+	methods := app.collect_methods()
+	defer { for m in methods { m.free() } }
+
+	content := generate_object_constructor(methods, app, 'Application', '', 'Gio')
+	assert content.contains("v_gv_object(mut ns, mut vs, c'action-group', val.ptr)"),
+		'expected val.ptr for same-namespace object property, got:\n${content}'
+}

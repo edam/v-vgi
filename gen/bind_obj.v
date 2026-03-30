@@ -96,7 +96,7 @@ fn generate_object_constructor(methods []FunctionInfo, info ObjectInfo, object_n
 	content += '\tmut ns := []&char{}\n'
 	content += '\tmut vs := []GValueBuffer{}\n'
 	content += '\tdefer { for mut v in vs { C.g_value_unset(voidptr(&v)) } }\n'
-	content += collect_gvalue_appends(info)
+	content += collect_gvalue_appends(info, namespace)
 	content += '\tptr := C.g_object_new_with_properties(C.${type_init}(), u32(ns.len), ns.data, vs.data)\n'
 	content += '\tif ptr == unsafe { nil } { panic(\'g_object_new_with_properties returned null for ${object_name}\') }\n'
 	content += '\treturn &${object_name}{ptr: unsafe { voidptr(ptr) }}\n'

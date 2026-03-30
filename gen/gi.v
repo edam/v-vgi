@@ -273,11 +273,11 @@ pub fn (info PropertyInfo) get_type_info() TypeInfo {
 	}
 }
 
-// return the V type for the property
+// return the V type for the property, using concrete pointer types for same-namespace objects
 pub fn (info PropertyInfo) get_v_type(namespace string) VType {
 	type_info := info.get_type_info()
 	defer { type_info.free() }
-	return type_info.to_v_type(namespace)
+	return type_info.to_property_v_type(namespace)
 }
 
 // return the GType constant name
@@ -735,6 +735,33 @@ pub fn (info TypeInfo) to_v_type(namespace string) VType {
 	return if is_pointer { VType{name: '&${base_name}'} } else { VType{name: base_name} }
 }
 
+// return the V type for a property: same as to_v_type except object/interface types in the
+// same namespace use a concrete pointer type (e.g. &Application) instead of voidptr
+pub fn (info TypeInfo) to_property_v_type(namespace string) VType {
+	if info.get_tag() == gi_type_tag_interface {
+		iface := info.get_interface_info() or { return VType{name: 'voidptr'} }
+		defer { iface.free() }
+		iface_type := iface.get_type()
+		if iface_type == 'enum' || iface_type == 'flags' {
+			iface_name := iface.get_name()
+			iface_ns := iface.get_namespace()
+			if iface_ns == namespace {
+				return VType{name: iface_name, is_enum: true}
+			} else {
+				return VType{name: 'int'}
+			}
+		}
+		// only GObject subclasses and interfaces have a ptr field; structs/unions/boxed do not
+		if iface_type == 'object' || iface_type == 'interface' {
+			if iface.get_namespace() == namespace {
+				return VType{name: '&${iface.get_name()}'}
+			}
+		}
+		return VType{name: 'voidptr'}
+	}
+	return info.to_v_type(namespace)
+}
+
 // return the GType constant name for code generation
 pub fn (info TypeInfo) to_gtype_constant() string {
 	tag := info.get_tag()
@@ -798,7 +825,8 @@ pub fn (info TypeInfo) to_property_helper_name() string {
 		defer { iface.free() }
 		t := iface.get_type()
 		if t == 'enum' || t == 'flags' { return 'int' }
-		return 'voidptr'
+		if t == 'object' || t == 'interface' { return 'object' }
+		return 'voidptr' // struct, union, boxed types
 	}
 	tag := info.get_tag()
 	return match tag {

@@ -37,7 +37,7 @@ fn generate_properties_struct(info ObjectInfo, object_name string, parent_name s
 // generate the gvalue append code for a single object's writable properties.
 // generates one line per property using gv_append_* helpers.
 // `properties` refers to the constructor parameter name.
-fn generate_gvalue_appends_for_object(info ObjectInfo) string {
+fn generate_gvalue_appends_for_object(info ObjectInfo, namespace string) string {
 	mut content := ''
 	n_props := info.get_n_properties()
 	for i in 0 .. int(n_props) {
@@ -51,10 +51,17 @@ fn generate_gvalue_appends_for_object(info ObjectInfo) string {
 		prop_name := prop.get_name()
 		v_prop_name := sanitize_param_name(prop_name.replace('-', '_'))
 		helper := prop.get_property_helper_name()
+		v_type := prop.get_v_type(namespace)
 
-		// enums/flags: helper is 'int' but value is an enum type — cast to int
+		// enums/flags: cast to int; concrete object types: extract .ptr; else pass directly
 		is_enum := helper == 'int' && prop.get_type_info().get_tag() == gi_type_tag_interface
-		value_expr := if is_enum { 'int(val)' } else { 'val' }
+		value_expr := if is_enum {
+			'int(val)'
+		} else if helper == 'object' && v_type.name != 'voidptr' {
+			'val.ptr'
+		} else {
+			'val'
+		}
 
 		content += "\tif val := props.${v_prop_name} { v_gv_${helper}(mut ns, mut vs, c'${prop_name}', ${value_expr}) }\n"
 
@@ -65,14 +72,14 @@ fn generate_gvalue_appends_for_object(info ObjectInfo) string {
 
 // recursively collect gvalue append code for an object and all its ancestors
 // (ancestors first, so parent properties come before own properties)
-fn collect_gvalue_appends(info ObjectInfo) string {
+fn collect_gvalue_appends(info ObjectInfo, namespace string) string {
 	mut content := ''
 	// recurse to ancestors first
 	if parent := info.get_parent() {
-		content += collect_gvalue_appends(parent)
+		content += collect_gvalue_appends(parent, namespace)
 		parent.free()
 	}
-	content += generate_gvalue_appends_for_object(info)
+	content += generate_gvalue_appends_for_object(info, namespace)
 	return content
 }
 
@@ -104,6 +111,8 @@ fn generate_property_methods(info ObjectInfo, object_name string, namespace stri
 			raw_result := 'v_getp_${helper}(obj.ptr, \'${prop_name}\')'
 			result_expr := if v_type.is_enum {
 				'unsafe { ${v_type.name}(${raw_result}) }'
+			} else if helper == 'object' && v_type.name != 'voidptr' {
+				'unsafe { ${v_type.name}(${raw_result}) }'
 			} else {
 				raw_result
 			}
@@ -114,7 +123,13 @@ fn generate_property_methods(info ObjectInfo, object_name string, namespace stri
 
 		// setter if writable and no method exists
 		if prop.is_writable() && 'set_${v_prop_name}' !in method_names {
-			set_val := if v_type.is_enum { 'int(val)' } else { 'val' }
+			set_val := if v_type.is_enum {
+				'int(val)'
+			} else if helper == 'object' && v_type.name != 'voidptr' {
+				'val.ptr'
+			} else {
+				'val'
+			}
 			content += 'pub fn (obj &${object_name}) set_${v_prop_name}(val ${v_type.name}) {\n'
 			content += '\tv_setp_${helper}(obj.ptr, \'${prop_name}\', ${set_val})\n'
 			content += '}\n\n'

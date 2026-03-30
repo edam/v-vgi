@@ -69,6 +69,8 @@ fn C.g_value_get_string(value voidptr) &char
 fn C.g_value_set_string(value voidptr, v_string &char)
 fn C.g_value_get_pointer(value voidptr) voidptr
 fn C.g_value_set_pointer(value voidptr, v_pointer voidptr)
+fn C.g_value_get_object(value voidptr) voidptr
+fn C.g_value_set_object(value voidptr, v_object voidptr)
 
 '
 
@@ -142,6 +144,14 @@ const g_type_float_id = u64(56)
 const g_type_double_id = u64(60)
 const g_type_string_id = u64(64)
 const g_type_pointer_id = u64(68)
+
+// v_gtype_of reads a GObject instance\'s GType from its instance layout.
+// GTypeInstance.g_class points to GTypeClass whose first field is g_type.
+// This mirrors G_TYPE_FROM_INSTANCE() / G_OBJECT_TYPE() — stable GLib ABI.
+fn v_gtype_of(obj voidptr) u64 {
+	g_class := unsafe { *(&voidptr(obj)) }
+	return unsafe { *(&u64(g_class)) }
+}
 
 // helper functions for appending GValue pairs to arrays (used in constructors)
 
@@ -230,6 +240,14 @@ fn v_gv_voidptr(mut names []&char, mut values []GValueBuffer, name &char, value 
 	mut gv := GValueBuffer{}
 	C.g_value_init(voidptr(&gv), g_type_pointer_id)
 	C.g_value_set_pointer(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_object(mut names []&char, mut values []GValueBuffer, name &char, value voidptr) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), v_gtype_of(value))
+	C.g_value_set_object(voidptr(&gv), value)
 	values << gv
 }
 
@@ -418,6 +436,23 @@ fn v_setp_voidptr(obj voidptr, prop_name string, val voidptr) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_pointer_id)
 	C.g_value_set_pointer(voidptr(&gvalue), val)
+	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
+	C.g_value_unset(voidptr(&gvalue))
+}
+
+fn v_getp_object(obj voidptr, prop_name string) voidptr {
+	mut value := GValueBuffer{}
+	C.g_value_init(voidptr(&value), v_gtype_of(obj))
+	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
+	result := C.g_value_get_object(voidptr(&value))
+	C.g_value_unset(voidptr(&value))
+	return result
+}
+
+fn v_setp_object(obj voidptr, prop_name string, val voidptr) {
+	mut gvalue := GValueBuffer{}
+	C.g_value_init(voidptr(&gvalue), v_gtype_of(val))
+	C.g_value_set_object(voidptr(&gvalue), val)
 	C.g_object_set_property(obj, prop_name.str, voidptr(&gvalue))
 	C.g_value_unset(voidptr(&gvalue))
 }
