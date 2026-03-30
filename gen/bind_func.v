@@ -47,7 +47,7 @@ fn generate_function_wrapper(func FunctionInfo, namespace string) string {
 	}
 
 	v_func_name := sanitize_param_name(func_name.replace('-', '_').to_lower())
-	params, call_args := collect_method_params(func, namespace)
+	params, call_args, out_params := collect_method_params(func, namespace)
 	param_list := params.join(', ')
 
 	return_type_info := func.get_return_type()
@@ -58,11 +58,11 @@ fn generate_function_wrapper(func FunctionInfo, namespace string) string {
 	can_throw := func.can_throw_gerror()
 	may_null := func.may_return_null()
 
-	return_sig := return_vtype.to_v_return_sig(can_throw, may_null, skip_return)
+	return_sig := build_return_sig(return_vtype, out_params, can_throw, may_null, skip_return)
 
 	mut out := 'pub fn ${v_func_name}(${param_list}) ${return_sig} {\n'
-	out += generate_method_body(symbol, none, call_args, return_vtype, can_throw, may_null,
-		skip_return)
+	out += generate_method_body(symbol, none, call_args, out_params, return_vtype, can_throw,
+		may_null, skip_return)
 	out += '}\n\n'
 	return out
 }

@@ -141,9 +141,99 @@ const g_type_double_id = u64(60)
 const g_type_string_id = u64(64)
 const g_type_pointer_id = u64(68)
 
+// helper functions for appending GValue pairs to arrays (used in constructors)
+
+fn v_gv_bool(mut names []&char, mut values []GValueBuffer, name &char, value bool) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_boolean_id)
+	C.g_value_set_boolean(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_i8(mut names []&char, mut values []GValueBuffer, name &char, value i8) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_char_id)
+	C.g_value_set_schar(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_u8(mut names []&char, mut values []GValueBuffer, name &char, value u8) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_uchar_id)
+	C.g_value_set_uchar(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_int(mut names []&char, mut values []GValueBuffer, name &char, value int) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_int_id)
+	C.g_value_set_int(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_u32(mut names []&char, mut values []GValueBuffer, name &char, value u32) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_uint_id)
+	C.g_value_set_uint(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_i64(mut names []&char, mut values []GValueBuffer, name &char, value i64) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_int64_id)
+	C.g_value_set_int64(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_u64(mut names []&char, mut values []GValueBuffer, name &char, value u64) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_uint64_id)
+	C.g_value_set_uint64(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_f32(mut names []&char, mut values []GValueBuffer, name &char, value f32) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_float_id)
+	C.g_value_set_float(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_f64(mut names []&char, mut values []GValueBuffer, name &char, value f64) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_double_id)
+	C.g_value_set_double(voidptr(&gv), value)
+	values << gv
+}
+
+fn v_gv_string(mut names []&char, mut values []GValueBuffer, name &char, value string) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_string_id)
+	C.g_value_set_string(voidptr(&gv), value.str)
+	values << gv
+}
+
+fn v_gv_voidptr(mut names []&char, mut values []GValueBuffer, name &char, value voidptr) {
+	names << name
+	mut gv := GValueBuffer{}
+	C.g_value_init(voidptr(&gv), g_type_pointer_id)
+	C.g_value_set_pointer(voidptr(&gv), value)
+	values << gv
+}
+
 // helper functions for property access
 
-fn get_bool_property(obj voidptr, prop_name string) bool {
+fn v_getp_bool(obj voidptr, prop_name string) bool {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_boolean_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -152,7 +242,7 @@ fn get_bool_property(obj voidptr, prop_name string) bool {
 	return result
 }
 
-fn set_bool_property(obj voidptr, prop_name string, val bool) {
+fn v_setp_bool(obj voidptr, prop_name string, val bool) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_boolean_id)
 	C.g_value_set_boolean(voidptr(&gvalue), val)
@@ -160,7 +250,7 @@ fn set_bool_property(obj voidptr, prop_name string, val bool) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_i8_property(obj voidptr, prop_name string) i8 {
+fn v_getp_i8(obj voidptr, prop_name string) i8 {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_char_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -169,7 +259,7 @@ fn get_i8_property(obj voidptr, prop_name string) i8 {
 	return result
 }
 
-fn set_i8_property(obj voidptr, prop_name string, val i8) {
+fn v_setp_i8(obj voidptr, prop_name string, val i8) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_char_id)
 	C.g_value_set_schar(voidptr(&gvalue), val)
@@ -177,7 +267,7 @@ fn set_i8_property(obj voidptr, prop_name string, val i8) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_u8_property(obj voidptr, prop_name string) u8 {
+fn v_getp_u8(obj voidptr, prop_name string) u8 {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_uchar_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -186,7 +276,7 @@ fn get_u8_property(obj voidptr, prop_name string) u8 {
 	return result
 }
 
-fn set_u8_property(obj voidptr, prop_name string, val u8) {
+fn v_setp_u8(obj voidptr, prop_name string, val u8) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_uchar_id)
 	C.g_value_set_uchar(voidptr(&gvalue), val)
@@ -194,7 +284,7 @@ fn set_u8_property(obj voidptr, prop_name string, val u8) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_int_property(obj voidptr, prop_name string) int {
+fn v_getp_int(obj voidptr, prop_name string) int {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_int_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -203,7 +293,7 @@ fn get_int_property(obj voidptr, prop_name string) int {
 	return result
 }
 
-fn set_int_property(obj voidptr, prop_name string, val int) {
+fn v_setp_int(obj voidptr, prop_name string, val int) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_int_id)
 	C.g_value_set_int(voidptr(&gvalue), val)
@@ -211,7 +301,7 @@ fn set_int_property(obj voidptr, prop_name string, val int) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_u32_property(obj voidptr, prop_name string) u32 {
+fn v_getp_u32(obj voidptr, prop_name string) u32 {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_uint_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -220,7 +310,7 @@ fn get_u32_property(obj voidptr, prop_name string) u32 {
 	return result
 }
 
-fn set_u32_property(obj voidptr, prop_name string, val u32) {
+fn v_setp_u32(obj voidptr, prop_name string, val u32) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_uint_id)
 	C.g_value_set_uint(voidptr(&gvalue), val)
@@ -228,7 +318,7 @@ fn set_u32_property(obj voidptr, prop_name string, val u32) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_i64_property(obj voidptr, prop_name string) i64 {
+fn v_getp_i64(obj voidptr, prop_name string) i64 {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_int64_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -237,7 +327,7 @@ fn get_i64_property(obj voidptr, prop_name string) i64 {
 	return result
 }
 
-fn set_i64_property(obj voidptr, prop_name string, val i64) {
+fn v_setp_i64(obj voidptr, prop_name string, val i64) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_int64_id)
 	C.g_value_set_int64(voidptr(&gvalue), val)
@@ -245,7 +335,7 @@ fn set_i64_property(obj voidptr, prop_name string, val i64) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_u64_property(obj voidptr, prop_name string) u64 {
+fn v_getp_u64(obj voidptr, prop_name string) u64 {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_uint64_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -254,7 +344,7 @@ fn get_u64_property(obj voidptr, prop_name string) u64 {
 	return result
 }
 
-fn set_u64_property(obj voidptr, prop_name string, val u64) {
+fn v_setp_u64(obj voidptr, prop_name string, val u64) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_uint64_id)
 	C.g_value_set_uint64(voidptr(&gvalue), val)
@@ -262,7 +352,7 @@ fn set_u64_property(obj voidptr, prop_name string, val u64) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_f32_property(obj voidptr, prop_name string) f32 {
+fn v_getp_f32(obj voidptr, prop_name string) f32 {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_float_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -271,7 +361,7 @@ fn get_f32_property(obj voidptr, prop_name string) f32 {
 	return result
 }
 
-fn set_f32_property(obj voidptr, prop_name string, val f32) {
+fn v_setp_f32(obj voidptr, prop_name string, val f32) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_float_id)
 	C.g_value_set_float(voidptr(&gvalue), val)
@@ -279,7 +369,7 @@ fn set_f32_property(obj voidptr, prop_name string, val f32) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_f64_property(obj voidptr, prop_name string) f64 {
+fn v_getp_f64(obj voidptr, prop_name string) f64 {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_double_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -288,7 +378,7 @@ fn get_f64_property(obj voidptr, prop_name string) f64 {
 	return result
 }
 
-fn set_f64_property(obj voidptr, prop_name string, val f64) {
+fn v_setp_f64(obj voidptr, prop_name string, val f64) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_double_id)
 	C.g_value_set_double(voidptr(&gvalue), val)
@@ -296,7 +386,7 @@ fn set_f64_property(obj voidptr, prop_name string, val f64) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_string_property(obj voidptr, prop_name string) string {
+fn v_getp_string(obj voidptr, prop_name string) string {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_string_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -305,7 +395,7 @@ fn get_string_property(obj voidptr, prop_name string) string {
 	return result
 }
 
-fn set_string_property(obj voidptr, prop_name string, val string) {
+fn v_setp_string(obj voidptr, prop_name string, val string) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_string_id)
 	C.g_value_set_string(voidptr(&gvalue), val.str)
@@ -313,7 +403,7 @@ fn set_string_property(obj voidptr, prop_name string, val string) {
 	C.g_value_unset(voidptr(&gvalue))
 }
 
-fn get_voidptr_property(obj voidptr, prop_name string) voidptr {
+fn v_getp_voidptr(obj voidptr, prop_name string) voidptr {
 	mut value := GValueBuffer{}
 	C.g_value_init(voidptr(&value), g_type_pointer_id)
 	C.g_object_get_property(obj, prop_name.str, voidptr(&value))
@@ -322,7 +412,7 @@ fn get_voidptr_property(obj voidptr, prop_name string) voidptr {
 	return result
 }
 
-fn set_voidptr_property(obj voidptr, prop_name string, val voidptr) {
+fn v_setp_voidptr(obj voidptr, prop_name string, val voidptr) {
 	mut gvalue := GValueBuffer{}
 	C.g_value_init(voidptr(&gvalue), g_type_pointer_id)
 	C.g_value_set_pointer(voidptr(&gvalue), val)

@@ -78,7 +78,7 @@ fn test_generate_object_constructor() {
 	content := generate_object_constructor(methods, obj, 'TestObject', 'ParentObject', 'GObject')
 
 	// verify constructor signature
-	assert content.contains('pub fn TestObject.new(properties TestObjectProperties)')
+	assert content.contains('pub fn TestObject.new(props TestObjectProperties)')
 	assert content.contains('&TestObject')
 
 	// should contain object creation
@@ -398,92 +398,6 @@ fn test_generate_properties_struct_writable_props() {
 	app.free()
 }
 
-fn test_generate_object_set_properties_no_props() {
-	// GObject.Object has no writable props - method body should be empty
-	repo := get_default_repository()
-	repo.require('GObject', '2.0') or {
-		eprintln('Failed to load GObject-2.0: ${err}')
-		assert false
-		return
-	}
-
-	n_infos := repo.get_n_infos('GObject')
-	mut object_info := ?ObjectInfo(none)
-	for i in 0 .. int(n_infos) {
-		info := repo.get_info('GObject', i) or { continue }
-		if info.get_type() == 'object' && info.get_name() == 'Object' {
-			object_info = info.as_object_info()
-			break
-		}
-		info.free()
-	}
-
-	assert object_info != none
-	obj := object_info or { panic('unreachable') }
-
-	content := generate_object_set_properties(obj, 'Object', '', 'GObject')
-
-	assert content.contains('pub fn (obj &Object) set_properties(properties ObjectProperties)')
-	assert content.contains('}\n')
-	// no property assignments
-	assert !content.contains('if value :=')
-
-	obj.free()
-}
-
-fn test_generate_object_set_properties_with_props() {
-	// Gio.Application has writable properties - set_properties should call typed helpers
-	repo := get_default_repository()
-	repo.require('Gio', '2.0') or {
-		eprintln('Failed to load Gio-2.0: ${err}')
-		eprintln('This test requires Gio-2.0 to be installed')
-		return
-	}
-
-	n_infos := repo.get_n_infos('Gio')
-	mut object_info := ?ObjectInfo(none)
-	for i in 0 .. int(n_infos) {
-		info := repo.get_info('Gio', i) or { continue }
-		if info.get_type() == 'object' && info.get_name() == 'Application' {
-			object_info = info.as_object_info()
-			break
-		}
-		info.free()
-	}
-
-	app := object_info or {
-		eprintln('Gio.Application not found, skipping')
-		return
-	}
-
-	n_props := app.get_n_properties()
-	mut has_writable := false
-	for i in 0 .. int(n_props) {
-		prop := app.get_property(u32(i)) or { continue }
-		if prop.is_writable() {
-			has_writable = true
-		}
-		prop.free()
-		if has_writable {
-			break
-		}
-	}
-
-	if !has_writable {
-		eprintln('Gio.Application has no writable properties, skipping')
-		app.free()
-		return
-	}
-
-	content := generate_object_set_properties(app, 'Application', '', 'Gio')
-
-	assert content.contains('pub fn (obj &Application) set_properties(properties ApplicationProperties)')
-	assert content.contains('if value := properties.')
-	assert content.contains('_property(obj.ptr,')
-
-	app.free()
-}
-
 fn test_generate_property_methods_no_props() {
 	// GObject.Object has no properties - should return empty string
 	repo := get_default_repository()
@@ -554,7 +468,7 @@ fn test_generate_property_methods_with_props() {
 	if content.len > 0 {
 		assert content.contains('pub fn (obj &Application) get_')
 			|| content.contains('pub fn (obj &Application) set_')
-		assert content.contains('_property(obj.ptr,')
+		assert content.contains('v_setp_') || content.contains('v_getp_')
 	}
 
 	app.free()
@@ -602,7 +516,6 @@ fn test_generate_object_binding_creates_file() {
 	assert content.contains('pub struct Object {')
 	assert content.contains('pub struct ObjectProperties {')
 	assert content.contains('pub fn Object.new(')
-	assert content.contains('pub fn (obj &Object) set_properties(')
 
 	obj.free()
 }

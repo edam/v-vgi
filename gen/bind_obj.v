@@ -67,9 +67,6 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 		namespace)
 	content += generate_object_constructor(methods, info, object_name, parent_name, namespace)
 	content += generate_named_constructors(methods, object_name, namespace)
-	content += generate_object_append_gvalues(info, object_name, parent_name, parent_embed,
-		namespace)
-	content += generate_object_set_properties(info, object_name, parent_name, namespace)
 	content += generate_property_methods(info, object_name, namespace)
 	content += generate_object_methods(methods, object_name, namespace)
 	content += generate_object_interface_implementations(methods, info, object_name, namespace)
@@ -92,14 +89,14 @@ fn generate_object_constructor(methods []FunctionInfo, info ObjectInfo, object_n
 		return content
 	}
 
-	mut content := 'pub fn ${object_name}.new(properties ${object_name}Properties) &${object_name} {\n'
-	content += '\tmut names := []&char{}\n'
-	content += '\tmut values := []GValueBuffer{}\n'
-	content += '\tproperties.append_gvalues(mut names, mut values)\n'
-	content += '\tobj_ptr := C.g_object_new_with_properties(C.${type_init}(), u32(names.len), names.data, values.data)\n'
-	content += '\tfor mut v in values { C.g_value_unset(voidptr(&v)) }\n'
-	content += '\tif obj_ptr == unsafe { nil } { panic(\'g_object_new_with_properties returned null for ${object_name}\') }\n'
-	content += '\treturn &${object_name}{ptr: unsafe { voidptr(obj_ptr) }}\n'
+	mut content := 'pub fn ${object_name}.new(props ${object_name}Properties) &${object_name} {\n'
+	content += '\tmut ns := []&char{}\n'
+	content += '\tmut vs := []GValueBuffer{}\n'
+	content += '\tdefer { for mut v in vs { C.g_value_unset(voidptr(&v)) } }\n'
+	content += collect_gvalue_appends(info)
+	content += '\tptr := C.g_object_new_with_properties(C.${type_init}(), u32(ns.len), ns.data, vs.data)\n'
+	content += '\tif ptr == unsafe { nil } { panic(\'g_object_new_with_properties returned null for ${object_name}\') }\n'
+	content += '\treturn &${object_name}{ptr: unsafe { voidptr(ptr) }}\n'
 	content += '}\n\n'
 	return content
 }
@@ -126,7 +123,7 @@ fn generate_named_constructors(methods []FunctionInfo, object_name string, names
 		can_throw := method.can_throw_gerror()
 		may_null := method.may_return_null()
 
-		params, call_args := collect_method_params(method, namespace)
+		params, call_args, _ := collect_method_params(method, namespace)
 		param_list := params.join(', ')
 
 		// named constructors return the object type

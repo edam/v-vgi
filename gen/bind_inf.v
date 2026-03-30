@@ -34,7 +34,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 		v_method_name := method_name.replace('-', '_')
 
 		// build parameter list
-		params, _ := collect_method_params(method, namespace)
+		params, _, out_params := collect_method_params(method, namespace)
 		param_list := params.join(', ')
 
 		// get return type
@@ -46,7 +46,7 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 		can_throw := method.can_throw_gerror()
 		may_null := method.may_return_null()
 
-		return_sig := return_vtype.to_v_return_sig(can_throw, may_null, skip_return)
+		return_sig := build_return_sig(return_vtype, out_params, can_throw, may_null, skip_return)
 		content += '\t${v_method_name}(${param_list}) ${return_sig}\n'
 	}
 	content += '}\n\n'

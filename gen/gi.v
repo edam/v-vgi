@@ -538,13 +538,15 @@ pub fn (t VType) to_c_return_sig(skip_return bool) string {
 	return if skip_return || t.name == 'void' { '' } else { t.to_c_type() }
 }
 
-// return a zero/nil literal for this type, used as default constructor arg
+// return a zero/nil literal for this type, used as out-param and default initialiser.
+// numeric types other than int use explicit casts to avoid V inferring int.
 pub fn (t VType) default_value() string {
 	return match t.name {
 		'bool' { 'false' }
 		'string' { "''" }
-		'i8', 'u8', 'i16', 'u16', 'int', 'u32', 'i64', 'u64' { '0' }
-		'f32', 'f64' { '0.0' }
+		'int' { '0' }
+		'i8', 'u8', 'i16', 'u16', 'u32', 'i64', 'u64' { '${t.name}(0)' }
+		'f32', 'f64' { '${t.name}(0.0)' }
 		'voidptr' { 'unsafe { nil }' }
 		else {
 			if t.name.starts_with('&') { 'unsafe { nil }' } else { 'unsafe { ${t.name}(0) }' } // enum/flags
