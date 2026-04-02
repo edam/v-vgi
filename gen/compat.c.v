@@ -3,6 +3,9 @@ module gen
 #pkgconfig --libs --cflags girepository-2.0
 
 #include <girepository/girepository.h>
+$if !windows {
+    #include <dlfcn.h>
+}
 
 // Core GIRepository functions (girepository-2.0 API)
 fn C.gi_repository_dup_default() &C.GIRepository
@@ -80,6 +83,14 @@ fn C.gi_enum_info_get_storage_type(info &C.GIEnumInfo) int
 
 // Value info functions
 fn C.gi_value_info_get_value(info &C.GIValueInfo) i64
+
+// Symbol availability
+$if windows {
+    fn C.GetModuleHandleA(module_name &char) voidptr
+    fn C.GetProcAddress(module voidptr, proc_name &char) voidptr
+} $else {
+    fn C.dlsym(handle voidptr, symbol &char) voidptr
+}
 
 // Error handling
 fn C.g_error_free(error &C.GError)

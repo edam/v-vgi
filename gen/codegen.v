@@ -12,6 +12,11 @@ fn generate_c_method_declaration(method FunctionInfo, namespace string) string {
 		return ''
 	}
 
+	// skip platform-specific symbols not available on this platform
+	if symbol_unavailable(symbol) {
+		return ''
+	}
+
 	// build C parameter list (methods have a receiver; constructors and free functions do not)
 	mut c_params := if !method.is_constructor() && method.is_method() { ['obj voidptr'] } else { []string{} }
 	n_args := method.get_n_args()
@@ -28,7 +33,7 @@ fn generate_c_method_declaration(method FunctionInfo, namespace string) string {
 			arg_name := sanitize_param_name(arg.get_name())
 			arg_vtype := arg.get_v_type(namespace)
 			// enums/flags are stored as int in C; use &int for out params
-			c_type := if arg_vtype.is_enum { 'int' } else { arg_vtype.to_c_type() }
+			c_type := if arg_vtype.kind == .enum_flags { 'int' } else { arg_vtype.to_c_type() }
 			c_params << '${arg_name} &${c_type}'
 		}
 
@@ -91,7 +96,7 @@ fn collect_method_params(method FunctionInfo, namespace string) ([]string, []str
 			params << '${arg_name} ${arg_vtype.name}'
 			call_args << if arg_vtype.name == 'string' {
 				'${arg_name}.str'
-			} else if arg_vtype.is_enum {
+			} else if arg_vtype.kind == .enum_flags {
 				'int(${arg_name})'
 			} else {
 				arg_name
@@ -161,6 +166,7 @@ fn generate_methods(methods []FunctionInfo, struct_name string, namespace string
 		if symbol == 'g_object_get_property' || symbol == 'g_object_set_property' { continue }
 		v_method_name := method_name.replace('-', '_')
 		if v_method_name in skip_names { continue }
+		if symbol_unavailable(symbol) { continue }
 
 		// special case: g_application_run - auto-inject os.args
 		if symbol == 'g_application_run' {
@@ -197,7 +203,7 @@ fn generate_methods(methods []FunctionInfo, struct_name string, namespace string
 // are appended to the C call and their values returned as part of a tuple.
 fn generate_method_body(symbol string, receiver ?string, call_args []string, out_params []OutParam, return_vtype VType, can_throw bool, may_null bool, skip_return bool) string {
 	needs_string_conv := return_vtype.name == 'string'
-	needs_enum_cast := return_vtype.is_enum
+	needs_enum_cast := return_vtype.kind == .enum_flags
 	is_nullable_type := return_vtype.name == 'string' || return_vtype.name == 'voidptr'
 		|| return_vtype.name.starts_with('&')
 	// nullable short-circuit only applies to simple (no out param) returns
@@ -209,7 +215,7 @@ fn generate_method_body(symbol string, receiver ?string, call_args []string, out
 	for op in out_params {
 		init := if op.vtype.name == 'string' {
 			'&char(unsafe { nil })'
-		} else if op.vtype.is_enum {
+		} else if op.vtype.kind == .enum_flags {
 			'int(0)' // enums passed as &int at C level; cast to enum type on return
 		} else {
 			op.vtype.default_value()
@@ -278,7 +284,7 @@ fn out_return_exprs(main_parts []string, out_params []OutParam) string {
 	for op in out_params {
 		parts << if op.vtype.name == 'string' {
 			'unsafe { v_cstring_or_empty(${op.name}) }'
-		} else if op.vtype.is_enum {
+		} else if op.vtype.kind == .enum_flags {
 			'unsafe { ${op.vtype.name}(${op.name}) }'
 		} else {
 			op.name

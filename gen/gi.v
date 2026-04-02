@@ -1,5 +1,7 @@
 module gen
 
+import os
+
 // Repository represents a GIRepository instance
 pub struct Repository {
 	ptr &C.GIRepository
@@ -273,11 +275,11 @@ pub fn (info PropertyInfo) get_type_info() TypeInfo {
 	}
 }
 
-// return the V type for the property, using concrete pointer types for same-namespace objects
-pub fn (info PropertyInfo) get_v_type(namespace string) VType {
+// return the V type for the property, using object interface types for GObject subclasses
+pub fn (info PropertyInfo) get_prop_type(namespace string) VType {
 	type_info := info.get_type_info()
 	defer { type_info.free() }
-	return type_info.to_property_v_type(namespace)
+	return type_info.to_prop_type(namespace)
 }
 
 // return the GType constant name
@@ -608,11 +610,31 @@ pub fn (info ArgInfo) is_enum_or_flags() bool {
 	return t == 'enum' || t == 'flags'
 }
 
-// VType holds a resolved V type name and whether it is a named enum/flags type
+// VTypeKind classifies how a resolved V property type should be handled at the call site.
+pub enum VTypeKind {
+	plain        // scalar, string, voidptr — passed directly
+	enum_flags   // same-namespace enum/flags — cast to/from int
+	object_iface // GObject subclass interface (IFoo / ns.IFoo) — call val.object_ptr()
+	object       // GLib concrete wrapper (&Foo for same-namespace GLib interfaces) — access val.ptr
+}
+
+// VType holds a resolved V type name and its kind, plus optional cross-namespace import info.
 pub struct VType {
 pub:
-	name    string
-	is_enum bool
+	name         string
+	kind         VTypeKind
+	import_alias string // non-empty if this type requires an import (e.g. 'gdk')
+	import_path  string // full import path (e.g. 'edam.vgi.gdk_4_0')
+}
+
+// for object_iface types, return the concrete struct type name (strips the leading I).
+// 'IApplication' → 'Application'; 'gdk.IDisplay' → 'gdk.Display'
+pub fn (t VType) concrete_name() string {
+	if t.name.contains('.') {
+		parts := t.name.split('.')
+		return '${parts[0]}.${parts[1][1..]}'
+	}
+	return t.name[1..]
 }
 
 // return the equivalent C type for use in fn C.xxx() declarations
@@ -722,7 +744,7 @@ pub fn (info TypeInfo) to_v_type(namespace string) VType {
 				iface_name := iface.get_name()
 				iface_ns := iface.get_namespace()
 				if iface_ns == namespace {
-					return VType{name: iface_name, is_enum: true}
+					return VType{name: iface_name, kind: .enum_flags}
 				} else {
 					// cross-namespace enum/flags: use int (C-compatible, avoids import)
 					return VType{name: 'int'}
@@ -735,9 +757,10 @@ pub fn (info TypeInfo) to_v_type(namespace string) VType {
 	return if is_pointer { VType{name: '&${base_name}'} } else { VType{name: base_name} }
 }
 
-// return the V type for a property: same as to_v_type except object/interface types in the
-// same namespace use a concrete pointer type (e.g. &Application) instead of voidptr
-pub fn (info TypeInfo) to_property_v_type(namespace string) VType {
+// return the V type for a property. GObject subclass types become object interface types
+// (IFoo or ns.IFoo with import info) so user-derived structs can satisfy the interface.
+// GLib interface types stay as concrete &Foo wrappers (same namespace) or voidptr (cross).
+pub fn (info TypeInfo) to_prop_type(namespace string) VType {
 	if info.get_tag() == gi_type_tag_interface {
 		iface := info.get_interface_info() or { return VType{name: 'voidptr'} }
 		defer { iface.free() }
@@ -746,15 +769,41 @@ pub fn (info TypeInfo) to_property_v_type(namespace string) VType {
 			iface_name := iface.get_name()
 			iface_ns := iface.get_namespace()
 			if iface_ns == namespace {
-				return VType{name: iface_name, is_enum: true}
+				return VType{name: iface_name, kind: .enum_flags}
 			} else {
 				return VType{name: 'int'}
 			}
 		}
-		// only GObject subclasses and interfaces have a ptr field; structs/unions/boxed do not
-		if iface_type == 'object' || iface_type == 'interface' {
+		// GObject subclasses: emit object interface type (IFoo / ns.IFoo) so that
+		// user-derived structs embedding the generated struct can satisfy the interface.
+		if iface_type == 'object' {
+			iface_name := iface.get_name()
+			iface_ns := iface.get_namespace()
+			if iface_ns == namespace {
+				return VType{name: 'I${iface_name}', kind: .object_iface}
+			} else {
+				repo := get_default_repository()
+				version := repo.get_version(iface_ns)
+				module_path := get_binding_dir_name(iface_ns, version)
+				// only emit cross-namespace interface if the binding directory exists;
+				// otherwise fall through to voidptr (user must generate that namespace first)
+				if !os.is_dir(get_vmod_path(module_path)) {
+					return VType{name: 'voidptr'}
+				}
+				alias := iface_ns.to_lower()
+				return VType{
+					name: '${alias}.I${iface_name}'
+					kind: .object_iface
+					import_alias: alias
+					import_path: 'edam.vgi.${module_path}'
+				}
+			}
+		}
+		// GLib interface types: concrete &Foo wrapper (same namespace) or plain voidptr (cross).
+		// These are not wired into the V interface system, so we use the C wrapper struct directly.
+		if iface_type == 'interface' {
 			if iface.get_namespace() == namespace {
-				return VType{name: '&${iface.get_name()}'}
+				return VType{name: '&${iface.get_name()}', kind: .object}
 			}
 		}
 		return VType{name: 'voidptr'}

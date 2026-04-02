@@ -10,11 +10,11 @@ pub fn get_vmod_path(rel_path string) string {
 }
 
 const v_keywords = ['string', 'type', 'struct', 'enum', 'interface', 'fn', 'const', 'import',
-	'module', 'pub', 'mut', 'shared', 'static', 'volatile', 'unsafe', 'return', 'if', 'else',
-	'for', 'match', 'select', 'defer', 'goto', 'break', 'continue', 'in', 'is', 'as', 'or',
-	'and', 'not', 'none', 'true', 'false', 'nil', 'sizeof', 'typeof', 'isreftype', 'offsetof',
-	'dump', 'assert', 'map', 'chan', 'lock', 'rlock', 'go', 'spawn', 'asm', '__global',
-	'__offsetof', 'error', 'panic', 'exit', 'print', 'println', 'eprint', 'eprintln']
+	'module', 'pub', 'mut', 'shared', 'static', 'volatile', 'unsafe', 'return', 'if', 'else', 'for',
+	'match', 'select', 'defer', 'goto', 'break', 'continue', 'in', 'is', 'as', 'or', 'and', 'not',
+	'none', 'true', 'false', 'nil', 'sizeof', 'typeof', 'isreftype', 'offsetof', 'dump', 'assert',
+	'map', 'chan', 'lock', 'rlock', 'go', 'spawn', 'asm', '__global', '__offsetof', 'error', 'panic',
+	'exit', 'print', 'println', 'eprint', 'eprintln']
 
 // convert parameter names that conflict with V keywords
 pub fn sanitize_param_name(name string) string {
@@ -71,6 +71,36 @@ fn get_library_c_info(library string, version string) (string, string) {
 	pkgconfig_name := '${lib_lower}-${version}'
 	include_path := '<${lib_lower}/${lib_lower}.h>'
 	return pkgconfig_name, include_path
+}
+
+// platform/backend-specific terms that may indicate a symbol isn't available on all platforms
+const platform_hints = ['unix', 'win32', 'wayland', 'x11', 'quartz', 'broadway', 'mir']
+
+// return true if the C symbol is available in the currently loaded shared libraries.
+// only call this when the symbol name contains a platform hint (see platform_hints).
+fn symbol_exists(name string) bool {
+	$if windows {
+		sym := C.GetProcAddress(C.GetModuleHandleA(unsafe { nil }), name.str)
+		return sym != unsafe { nil }
+	} $else {
+		sym := C.dlsym(unsafe { nil }, name.str)
+		// if sym == unsafe { nil } {
+		// 	println('symbol not found in library, skipping: ${name}')
+		// }
+		return sym != unsafe { nil }
+	}
+}
+
+// return true if the symbol name contains a platform-specific term and the symbol
+// is not found in the loaded shared libraries — i.e. it should be skipped.
+fn symbol_unavailable(symbol string) bool {
+	s := symbol.to_lower()
+	for hint in platform_hints {
+		if s.contains(hint) {
+			return !symbol_exists(symbol)
+		}
+	}
+	return false
 }
 
 // convert library name and version to directory name

@@ -8,6 +8,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	file_name := object_name.to_lower() + '.v'
 	file_path := os.join_path(binding_dir, file_name)
 	namespace := info.get_namespace()
+	module_name := os.file_name(binding_dir)
 
 	// collect methods and signals once; freed at end via defer
 	methods := info.collect_methods()
@@ -15,7 +16,9 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	signals := info.collect_signals()
 	defer { for s in signals { s.free() } }
 
-	mut content := 'module ${os.file_name(binding_dir)}\n'
+	// accumulate all required imports: alias → full module path.
+	// sub-generators add to this map when they encounter cross-namespace types.
+	mut imports := map[string]string{}
 
 	// get parent and check if cross-namespace
 	parent := info.get_parent()
@@ -33,7 +36,7 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 			parent_module := get_binding_dir_name(parent_namespace, parent_version)
 			module_alias := parent_namespace.to_lower()
 
-			content += '\nimport edam.vgi.${parent_module} as ${module_alias}\n'
+			imports[module_alias] = 'edam.vgi.${parent_module}'
 			parent_embed = '${module_alias}.${parent_name}'
 		} else {
 			// same namespace - direct embed
@@ -42,39 +45,56 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 
 	if object_needs_os_import(methods) {
-		content += '\nimport os\n'
+		imports['os'] = 'os'
 	}
 
-	content += '\n'
+	// generate body: C declarations, struct, interface, properties, methods.
+	// imports are accumulated via the map and prepended after.
+	mut body := ''
 
-	// generate C function declarations
+	// C function declarations
 	type_init := info.get_type_init()
 	if type_init != '' {
-		content += 'fn C.${type_init}() u64\n'
+		body += 'fn C.${type_init}() u64\n'
 	}
-	content += 'fn C.g_object_new_with_properties(object_type u64, n_properties u32, names &&char, values voidptr) voidptr\n'
-	content += generate_c_declarations(methods, namespace)
-	content += '\n'
+	body += 'fn C.g_object_new_with_properties(object_type u64, n_properties u32, names &&char, values voidptr) voidptr\n'
+	body += generate_c_declarations(methods, namespace)
+	body += '\n'
 
 	// struct with embedded parent (no implements clause)
-	content += 'pub struct ${object_name} {\n'
+	body += 'pub struct ${object_name} {\n'
 	if parent_embed != '' {
-		content += '\t${parent_embed}\n'
+		body += '\t${parent_embed}\n'
 	} else {
-		content += '\tptr voidptr\n'
+		body += '\tptr voidptr\n'
 	}
-	content += '}\n\n'
+	body += '}\n\n'
 
-	content += generate_properties_struct(info, object_name, parent_name, parent_embed,
-		namespace)
-	content += generate_object_constructor(methods, info, object_name, parent_name, namespace)
-	content += generate_named_constructors(methods, object_name, namespace)
-	content += generate_property_methods(info, object_name, namespace)
-	content += generate_object_methods(methods, object_name, namespace)
-	content += generate_object_interface_implementations(methods, info, object_name, namespace)
-	content += generate_signal_bindings(signals, object_name, namespace)
+	body += generate_object_interface(methods, info, object_name, parent_embed, namespace)
+	body += generate_properties_struct(info, object_name, parent_name, parent_embed, namespace, mut imports)
+	body += generate_object_constructor(methods, info, object_name, parent_name, namespace)
+	body += generate_named_constructors(methods, object_name, namespace)
+	body += generate_property_methods(info, object_name, namespace, mut imports)
+	body += generate_object_methods(methods, object_name, namespace)
+	body += generate_object_interface_implementations(methods, info, object_name, namespace)
+	body += generate_signal_bindings(signals, object_name, namespace)
 
-	os.write_file(file_path, content) or {
+	// assemble file: module declaration, then imports, then body
+	mut file_content := 'module ${module_name}\n'
+	if imports.len > 0 {
+		file_content += '\n'
+		for alias, path in imports {
+			if alias == path {
+				file_content += 'import ${alias}\n'
+			} else {
+				file_content += 'import ${path} as ${alias}\n'
+			}
+		}
+	}
+	file_content += '\n'
+	file_content += body
+
+	os.write_file(file_path, file_content) or {
 		eprintln('Warning: Failed to write ${file_path}')
 		return
 	}
@@ -122,6 +142,9 @@ fn generate_named_constructors(methods []FunctionInfo, object_name string, names
 			continue
 		}
 
+		if symbol_unavailable(symbol) {
+			continue
+		}
 		v_method_name := method_name.replace('-', '_')
 		can_throw := method.can_throw_gerror()
 		may_null := method.may_return_null()
@@ -167,6 +190,103 @@ fn generate_named_constructors(methods []FunctionInfo, object_name string, names
 // generate object method bindings (thin wrapper around generate_methods)
 fn generate_object_methods(methods []FunctionInfo, object_name string, namespace string) string {
 	return generate_methods(methods, object_name, namespace, map[string]bool{})
+}
+
+// collect all method names defined by any ancestor object (not the object itself).
+// used to skip method name conflicts when building per-object interface hierarchies.
+fn collect_ancestor_method_names(info ObjectInfo) map[string]bool {
+	mut names := map[string]bool{}
+	if parent := info.get_parent() {
+		n := parent.get_n_methods()
+		for i in 0 .. int(n) {
+			m := parent.get_method(u32(i)) or { continue }
+			names[m.get_name().replace('-', '_')] = true
+			m.free()
+		}
+		for k, v in collect_ancestor_method_names(parent) {
+			names[k] = v
+		}
+		parent.free()
+	}
+	return names
+}
+
+// generate V interface IFoo for an object, mirroring the struct hierarchy.
+// each interface embeds only its direct parent's interface; root objects include object_ptr().
+// parent_embed is the parent struct embed expression (e.g. '' / 'Application' / 'gio.Application').
+fn generate_object_interface(methods []FunctionInfo, info ObjectInfo, object_name string, parent_embed string, namespace string) string {
+	// collect ancestor method names to avoid interface method conflicts
+	// (a subclass may override a method with a different signature, which V disallows in interfaces)
+	ancestor_method_names := collect_ancestor_method_names(info)
+	// derive parent interface embed from parent_embed
+	parent_iface_embed := if parent_embed == '' {
+		''
+	} else if parent_embed.contains('.') {
+		// cross-namespace: 'gio.Application' → 'gio.IApplication'
+		parts := parent_embed.split('.')
+		'${parts[0]}.I${parts[1]}'
+	} else {
+		// same namespace: 'Application' → 'IApplication'
+		'I${parent_embed}'
+	}
+
+	mut content := 'pub interface I${object_name} {\n'
+	if parent_iface_embed != '' {
+		content += '\t${parent_iface_embed}\n'
+	} else {
+		// root object: provide object_ptr() as the anchor method
+		content += '\tobject_ptr() voidptr\n'
+	}
+
+	// add own instance/static methods (mirrors generate_methods logic)
+	for method in methods {
+		if method.is_constructor() { continue }
+		method_name := method.get_name()
+		if method_name.starts_with('_') { continue }
+		symbol := method.get_symbol()
+		if symbol == '' { continue }
+		if symbol == 'g_object_get_property' || symbol == 'g_object_set_property' { continue }
+
+		v_method_name := method_name.replace('-', '_')
+
+		// skip methods that an ancestor already defines to avoid interface method conflicts
+		// (V disallows two methods with the same name but different signatures in an interface hierarchy)
+		if v_method_name in ancestor_method_names { continue }
+
+		// special case: g_application_run is generated as run() int with no params
+		if symbol == 'g_application_run' {
+			content += '\t${v_method_name}() int\n'
+			continue
+		}
+
+		params, _, out_params := collect_method_params(method, namespace)
+		param_list := params.join(', ')
+
+		return_type_info := method.get_return_type()
+		return_vtype := return_type_info.to_v_type(namespace)
+		return_type_info.free()
+
+		skip_return := method.skip_return() || return_vtype.name == 'void'
+		can_throw := method.can_throw_gerror()
+		may_null := method.may_return_null()
+
+		return_sig := build_return_sig(return_vtype, out_params, can_throw, may_null, skip_return)
+		if return_sig != '' {
+			content += '\t${v_method_name}(${param_list}) ${return_sig}\n'
+		} else {
+			content += '\t${v_method_name}(${param_list})\n'
+		}
+	}
+	content += '}\n\n'
+
+	// for root objects, generate object_ptr() method on the struct itself
+	if parent_embed == '' {
+		content += 'pub fn (obj &${object_name}) object_ptr() voidptr {\n'
+		content += '\treturn obj.ptr\n'
+		content += '}\n\n'
+	}
+
+	return content
 }
 
 // return true if any method requires import os in the generated binding

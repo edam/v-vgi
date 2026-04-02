@@ -303,7 +303,8 @@ fn test_generate_properties_struct_no_props() {
 	assert object_info != none
 	obj := object_info or { panic('unreachable') }
 
-	content := generate_properties_struct(obj, 'Object', '', '', 'GObject')
+	mut imports := map[string]string{}
+	content := generate_properties_struct(obj, 'Object', '', '', 'GObject', mut imports)
 
 	assert content.contains('@[params]')
 	assert content.contains('pub struct ObjectProperties {')
@@ -336,7 +337,8 @@ fn test_generate_properties_struct_with_parent() {
 	assert object_info != none
 	obj := object_info or { panic('unreachable') }
 
-	content := generate_properties_struct(obj, 'ChildObject', 'Object', 'Object', 'GObject')
+	mut imports := map[string]string{}
+	content := generate_properties_struct(obj, 'ChildObject', 'Object', 'Object', 'GObject', mut imports)
 
 	assert content.contains('pub struct ChildObjectProperties {')
 	assert content.contains('\tObjectProperties')
@@ -388,7 +390,8 @@ fn test_generate_properties_struct_writable_props() {
 		return
 	}
 
-	content := generate_properties_struct(app, 'Application', '', '', 'Gio')
+	mut imports := map[string]string{}
+	content := generate_properties_struct(app, 'Application', '', '', 'Gio', mut imports)
 
 	assert content.contains('@[params]')
 	assert content.contains('pub struct ApplicationProperties {')
@@ -421,7 +424,8 @@ fn test_generate_property_methods_no_props() {
 	assert object_info != none
 	obj := object_info or { panic('unreachable') }
 
-	content := generate_property_methods(obj, 'Object', 'GObject')
+	mut imports := map[string]string{}
+	content := generate_property_methods(obj, 'Object', 'GObject', mut imports)
 
 	assert content == ''
 
@@ -460,7 +464,8 @@ fn test_generate_property_methods_with_props() {
 		return
 	}
 
-	content := generate_property_methods(app, 'Application', 'Gio')
+	mut imports := map[string]string{}
+	content := generate_property_methods(app, 'Application', 'Gio', mut imports)
 
 	// property accessors are only generated when no explicit method already exists;
 	// Gio.Application has explicit get_/set_ methods for all its properties, so
@@ -619,6 +624,78 @@ fn test_generate_enum() {
 	}
 }
 
+fn test_generate_object_interface() {
+	// GObject.Object is the root - interface should have object_ptr() and no parent embed
+	// Gio.Application should embed gobject.IObject
+	repo := get_default_repository()
+	repo.require('GObject', '2.0') or {
+		eprintln('Failed to load GObject-2.0: ${err}')
+		assert false
+		return
+	}
+
+	n_infos := repo.get_n_infos('GObject')
+	mut object_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('GObject', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Object' {
+			object_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	assert object_info != none
+	obj := object_info or { panic('unreachable') }
+	methods := obj.collect_methods()
+	defer { for m in methods { m.free() } }
+
+	// root object: no parent_embed → interface has object_ptr() + struct gets object_ptr() method
+	content := generate_object_interface(methods, obj, 'Object', '', 'GObject')
+	assert content.contains('pub interface IObject {'), 'expected IObject interface'
+	assert content.contains('\tobject_ptr() voidptr'), 'root interface should have object_ptr()'
+	assert content.contains('pub fn (obj &Object) object_ptr() voidptr {'), 'root struct should have object_ptr() method'
+
+	obj.free()
+}
+
+fn test_object_interface_embeds_parent() {
+	// Gio.Application's parent is GObject.Object (cross-namespace)
+	// its interface should embed gobject.IObject
+	repo := get_default_repository()
+	repo.require('Gio', '2.0') or {
+		eprintln('Failed to load Gio-2.0: ${err}')
+		return
+	}
+
+	n_infos := repo.get_n_infos('Gio')
+	mut app_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gio', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Application' {
+			app_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	app := app_info or {
+		eprintln('Gio.Application not found, skipping')
+		return
+	}
+	defer { app.free() }
+
+	methods := app.collect_methods()
+	defer { for m in methods { m.free() } }
+
+	// Gio.Application parent is GObject.Object → parent_embed = 'gobject.Object'
+	// so interface should embed 'gobject.IObject'
+	content := generate_object_interface(methods, app, 'Application', 'gobject.Object', 'Gio')
+	assert content.contains('pub interface IApplication {'), 'expected IApplication interface'
+	assert content.contains('\tgobject.IObject'), 'cross-namespace parent should be embedded as gobject.IObject'
+	assert !content.contains('object_ptr() voidptr'), 'non-root interface should not redeclare object_ptr()'
+}
+
 fn test_object_type_property_uses_concrete_type() {
 	// Gio.Application has 'action-group' property of type GActionGroup (same namespace)
 	// it should generate as ?&ActionGroup, not ?voidptr
@@ -645,7 +722,8 @@ fn test_object_type_property_uses_concrete_type() {
 	}
 	defer { app.free() }
 
-	content := generate_properties_struct(app, 'Application', '', '', 'Gio')
+	mut imports := map[string]string{}
+	content := generate_properties_struct(app, 'Application', '', '', 'Gio', mut imports)
 	assert content.contains('action_group ?&ActionGroup'), 'expected action_group ?&ActionGroup, got:\n${content}'
 }
 
@@ -678,6 +756,39 @@ fn test_object_type_property_constructor_uses_ptr() {
 	defer { for m in methods { m.free() } }
 
 	content := generate_object_constructor(methods, app, 'Application', '', 'Gio')
-	assert content.contains("v_gv_object(mut ns, mut vs, c'action-group', val.ptr)"),
-		'expected val.ptr for same-namespace object property, got:\n${content}'
+	assert content.contains("v_gv_object(mut ns, mut vs, c'action-group', val.object_ptr())"),
+		'expected val.object_ptr() for GLib interface property, got:\n${content}'
+}
+
+fn test_cross_namespace_object_property_uses_qualified_interface() {
+	// GtkWidget.display is GdkDisplay (cross-namespace object): should generate
+	// 'display ?gdk.IDisplay' and populate the imports map with the gdk entry.
+	repo := get_default_repository()
+	repo.require('Gtk', '4.0') or {
+		eprintln('Failed to load Gtk-4.0: ${err}')
+		return
+	}
+
+	n_infos := repo.get_n_infos('Gtk')
+	mut widget_info := ?ObjectInfo(none)
+	for i in 0 .. int(n_infos) {
+		info := repo.get_info('Gtk', i) or { continue }
+		if info.get_type() == 'object' && info.get_name() == 'Widget' {
+			widget_info = info.as_object_info()
+			break
+		}
+		info.free()
+	}
+
+	widget := widget_info or {
+		eprintln('Gtk.Widget not found, skipping')
+		return
+	}
+	defer { widget.free() }
+
+	mut imports := map[string]string{}
+	content := generate_properties_struct(widget, 'Widget', '', '', 'Gtk', mut imports)
+
+	assert content.contains('cursor ?gdk.ICursor'), 'expected cursor ?gdk.ICursor, got:\n${content}'
+	assert 'gdk' in imports, 'expected gdk import to be collected, got: ${imports}'
 }

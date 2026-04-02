@@ -88,8 +88,6 @@ export PKG_CONFIG_PATH="/usr/local/Homebrew/Library/Homebrew/os/mac/pkgconfig/15
 
 # Documentation
 
-## Generated Bindings
-
 Although GObject Introspection (gi) can be run dynamically (such as PyGi), this
 cannot be done for V, as we must run the code to generate bindings before
 compiling the programme that uses them.  `gi.vsh` does this.
@@ -103,22 +101,96 @@ suggested that you import them with an alias:
 import edam.vgi.gtk_4_0 as gtk
 ```
 
-## Library Bindings
+## Objects
 
-### Objects
-
-Objects map to V struct types.  Use Object.new() to create.
-
-As well as defining `set_` and `get_` functions for properties, object
-properties can also be specified via a named properties struct in `new()`:
+GObject-based objects map to V struct types.  V's embedded structs are used to
+"inherit" properties from parent types.  E.g., `gtk.Window` is defined with an
+embedded `gtk.Widget`.
 
 ``` V
-obj1 := Object.new() // no properties specified
-obj1.set_some_property('foo')
-obj2 := Object.new(some_property: 'foo') // also works
+pub struct Window {
+    Widget // inherit Widget's properties
+}
 ```
 
-### Signals
+Use `Object.new()` to instantiate objects.  The generated `new()` methods allow
+you to optionally specify object properties (see Params Structs below).
+
+``` V
+pub fn Window.new(props WindowParams) &Window{
+    ...
+}
+```
+
+### Properties
+
+Methods to set/get properties are defined on the object.  Properties can also be
+specified when creating the object (with the `new()` function).
+
+``` V
+win := Window.new() // no properties specified
+win.set_child(some_child) // set property after
+
+win := Window.new(child: some_child) // also works
+```
+
+### Implementation Details
+
+#### Object Params Structs
+
+Each object type has an associated *params struct* which is used to pass zero or
+more object properties to the object constructors to initialise it them.
+
+``` V
+win := gtk.Window.new(child: some_child)
+```
+
+The params structs for each object, marked with `@[params]`, list the properties
+for that object and embed the params struct for the object's parent (so that the
+parent's properties are also included).  E.g., `gtk.Window` has an associated
+`gtk.WindowParams` struct, which embeds `gtk.WidgetParams`.
+
+``` V
+@[param]
+struct WindowsParams {
+    WidgetParams // inherit Widget's properties
+    // non-inherited properties:
+    application ?IApplication
+	child ?IWidget
+    ...
+}
+```
+
+#### Object Interfaces
+
+Each object type also has an associated *object interface* (not to be confused
+with an interface provided by the library).  Object interfaces allow for user
+types derived from library objects to be used in their place.
+
+For example, the `gtk.Application` object struct has an accompanying object
+interface, `gtk.IApplication`.  In the example above, the `gtk.WindowParams`
+struct uses it as the type for the `application` property of the `Window`.  This
+allows either a `gtk.Application` or any derived object to be used.  For
+example, the user may wish to use `MyApp`, their own derived object.
+
+``` V
+struct MyApp {
+    gtk.Application // derives from gtk.Application, so can be used as IApplication
+}
+```
+
+Note: the addition of this mechanism significantly impacts compilation time.
+However, the hope is hat future optimisation of V should address this.
+
+## Interfaces
+
+GLib-based interfaces are defined as V interfaces.
+
+``` V
+
+```
+
+## Signals
 
 Connect signals with dedicated methods.
 

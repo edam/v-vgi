@@ -58,6 +58,11 @@ fn generate_interface_binding(info InterfaceInfo, binding_dir string) {
 	content += '\tptr voidptr\n'
 	content += '}\n\n'
 
+	// object_ptr() provides cross-module access to ptr, mirroring GObject root structs
+	content += 'pub fn (obj &${interface_name}) object_ptr() voidptr {\n'
+	content += '\treturn obj.ptr\n'
+	content += '}\n\n'
+
 	// generate methods on concrete struct (thin wrapper around generate_methods)
 	content += generate_interface_methods(methods, interface_name, namespace)
 	content += generate_signal_bindings(signals, interface_name, namespace)
