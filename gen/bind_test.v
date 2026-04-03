@@ -78,7 +78,7 @@ fn test_generate_object_constructor() {
 	content := generate_object_constructor(methods, obj, 'TestObject', 'ParentObject', 'GObject')
 
 	// verify constructor signature
-	assert content.contains('pub fn TestObject.new(props TestObjectProperties)')
+	assert content.contains('pub fn TestObject.new(props TestObjectParams)')
 	assert content.contains('&TestObject')
 
 	// should contain object creation
@@ -307,7 +307,7 @@ fn test_generate_properties_struct_no_props() {
 	content := generate_properties_struct(obj, 'Object', '', '', 'GObject', mut imports)
 
 	assert content.contains('@[params]')
-	assert content.contains('pub struct ObjectProperties {')
+	assert content.contains('pub struct ObjectParams {')
 	assert content.contains('pub:')
 	assert content.contains('}\n')
 
@@ -340,8 +340,8 @@ fn test_generate_properties_struct_with_parent() {
 	mut imports := map[string]string{}
 	content := generate_properties_struct(obj, 'ChildObject', 'Object', 'Object', 'GObject', mut imports)
 
-	assert content.contains('pub struct ChildObjectProperties {')
-	assert content.contains('\tObjectProperties')
+	assert content.contains('pub struct ChildObjectParams {')
+	assert content.contains('\tObjectParams')
 
 	obj.free()
 }
@@ -394,7 +394,7 @@ fn test_generate_properties_struct_writable_props() {
 	content := generate_properties_struct(app, 'Application', '', '', 'Gio', mut imports)
 
 	assert content.contains('@[params]')
-	assert content.contains('pub struct ApplicationProperties {')
+	assert content.contains('pub struct ApplicationParams {')
 	// writable props are declared as optional types
 	assert content.contains(' ?')
 
@@ -519,7 +519,7 @@ fn test_generate_object_binding_creates_file() {
 
 	assert content.contains('module ')
 	assert content.contains('pub struct Object {')
-	assert content.contains('pub struct ObjectProperties {')
+	assert content.contains('pub struct ObjectParams {')
 	assert content.contains('pub fn Object.new(')
 
 	obj.free()

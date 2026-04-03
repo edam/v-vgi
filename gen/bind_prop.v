@@ -3,10 +3,10 @@ module gen
 // generate @[params] properties struct
 fn generate_properties_struct(info ObjectInfo, object_name string, parent_name string, parent_embed string, namespace string, mut imports map[string]string) string {
 	mut content := '@[params]\n'
-	content += 'pub struct ${object_name}Properties {\n'
+	content += 'pub struct ${object_name}Params {\n'
 
 	if parent_embed != '' {
-		content += '\t${parent_embed}Properties\n'
+		content += '\t${parent_embed}Params\n'
 	}
 	content += 'pub:\n'
 
@@ -73,7 +73,7 @@ fn generate_gvalue_appends_for_object(info ObjectInfo, namespace string) string 
 // recursively collect gvalue append code for an object and all its ancestors
 // (ancestors first, so parent properties come before own properties).
 // each object's properties are generated using that object's own namespace, so the
-// value_expr matches the type used in that object's own Properties struct.
+// value_expr matches the type used in that object's own Params struct.
 fn collect_gvalue_appends(info ObjectInfo, namespace string) string {
 	mut content := ''
 	// recurse to ancestors first, using each parent's own namespace

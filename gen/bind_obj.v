@@ -100,19 +100,19 @@ fn generate_object_binding(info ObjectInfo, binding_dir string) {
 	}
 }
 
-// generate Object.new(properties ObjectProperties) constructor using g_object_new_with_properties().
+// generate Object.new(properties ObjectParams) constructor using g_object_new_with_properties().
 // all properties (own + inherited) are collected via append_gvalues() and passed in a single
 // g_object_new_with_properties() call — the standard GObject construction pattern.
 fn generate_object_constructor(methods []FunctionInfo, info ObjectInfo, object_name string, parent_name string, namespace string) string {
 	type_init := info.get_type_init()
 	if type_init == '' {
-		mut content := 'pub fn ${object_name}.new(properties ${object_name}Properties) &${object_name} {\n'
+		mut content := 'pub fn ${object_name}.new(properties ${object_name}Params) &${object_name} {\n'
 		content += '\tpanic("${object_name}.new() not yet implemented - no type init")\n'
 		content += '}\n\n'
 		return content
 	}
 
-	mut content := 'pub fn ${object_name}.new(props ${object_name}Properties) &${object_name} {\n'
+	mut content := 'pub fn ${object_name}.new(props ${object_name}Params) &${object_name} {\n'
 	content += '\tmut ns := []&char{}\n'
 	content += '\tmut vs := []GValueBuffer{}\n'
 	content += '\tdefer { for mut v in vs { C.g_value_unset(voidptr(&v)) } }\n'
