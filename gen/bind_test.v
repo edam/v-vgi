@@ -29,7 +29,11 @@ fn test_generate_object_methods() {
 	obj := object_info or { panic('unreachable') }
 
 	methods := obj.collect_methods()
-	defer { for m in methods { m.free() } }
+	defer {
+		for m in methods {
+			m.free()
+		}
+	}
 
 	// generate C declarations
 	c_decls := generate_c_declarations(methods, 'GObject')
@@ -72,10 +76,15 @@ fn test_generate_object_constructor() {
 	obj := object_info or { panic('unreachable') }
 
 	methods := obj.collect_methods()
-	defer { for m in methods { m.free() } }
+	defer {
+		for m in methods {
+			m.free()
+		}
+	}
 
 	// generate constructor
-	content := generate_object_constructor(methods, obj, 'TestObject', 'ParentObject', 'GObject')
+	content := generate_object_constructor(methods, obj, 'TestObject', 'ParentObject',
+		'GObject')
 
 	// verify constructor signature
 	assert content.contains('pub fn TestObject.new(props TestObjectParams)')
@@ -116,7 +125,11 @@ fn test_generate_interface() {
 			m := iface.get_method(u32(i)) or { continue }
 			iface_methods << m
 		}
-		defer { for m in iface_methods { m.free() } }
+		defer {
+			for m in iface_methods {
+				m.free()
+			}
+		}
 
 		// generate C declarations
 		c_decls := generate_c_declarations(iface_methods, 'Gio')
@@ -168,10 +181,15 @@ fn test_object_interface_implementations() {
 		object_name := obj.get_name()
 
 		methods := obj.collect_methods()
-		defer { for m in methods { m.free() } }
+		defer {
+			for m in methods {
+				m.free()
+			}
+		}
 
 		// generate interface implementations
-		content := generate_object_interface_implementations(methods, obj, object_name, 'Gio')
+		content := generate_object_interface_implementations(methods, obj, object_name,
+			'Gio')
 
 		// verify interface methods are generated if the object implements interfaces
 		n_interfaces := obj.get_n_interfaces()
@@ -338,7 +356,8 @@ fn test_generate_properties_struct_with_parent() {
 	obj := object_info or { panic('unreachable') }
 
 	mut imports := map[string]string{}
-	content := generate_properties_struct(obj, 'ChildObject', 'Object', 'Object', 'GObject', mut imports)
+	content := generate_properties_struct(obj, 'ChildObject', 'Object', 'Object', 'GObject', mut
+		imports)
 
 	assert content.contains('pub struct ChildObjectParams {')
 	assert content.contains('\tObjectParams')
@@ -550,7 +569,11 @@ fn test_application_run_special_case() {
 	}
 
 	methods := app.collect_methods()
-	defer { for m in methods { m.free() } }
+	defer {
+		for m in methods {
+			m.free()
+		}
+	}
 
 	content := generate_object_methods(methods, 'Application', 'Gio')
 
@@ -648,7 +671,11 @@ fn test_generate_object_interface() {
 	assert object_info != none
 	obj := object_info or { panic('unreachable') }
 	methods := obj.collect_methods()
-	defer { for m in methods { m.free() } }
+	defer {
+		for m in methods {
+			m.free()
+		}
+	}
 
 	// root object: no parent_embed → interface has object_ptr() + struct gets object_ptr() method
 	content := generate_object_interface(methods, obj, 'Object', '', 'GObject')
@@ -683,14 +710,20 @@ fn test_object_interface_embeds_parent() {
 		eprintln('Gio.Application not found, skipping')
 		return
 	}
+
 	defer { app.free() }
 
 	methods := app.collect_methods()
-	defer { for m in methods { m.free() } }
+	defer {
+		for m in methods {
+			m.free()
+		}
+	}
 
 	// Gio.Application parent is GObject.Object → parent_embed = 'gobject.Object'
 	// so interface should embed 'gobject.IObject'
-	content := generate_object_interface(methods, app, 'Application', 'gobject.Object', 'Gio')
+	content := generate_object_interface(methods, app, 'Application', 'gobject.Object',
+		'Gio')
 	assert content.contains('pub interface IApplication {'), 'expected IApplication interface'
 	assert content.contains('\tgobject.IObject'), 'cross-namespace parent should be embedded as gobject.IObject'
 	assert !content.contains('object_ptr() voidptr'), 'non-root interface should not redeclare object_ptr()'
@@ -720,6 +753,7 @@ fn test_object_type_property_uses_concrete_type() {
 		eprintln('Gio.Application not found, skipping')
 		return
 	}
+
 	defer { app.free() }
 
 	mut imports := map[string]string{}
@@ -750,14 +784,18 @@ fn test_object_type_property_constructor_uses_ptr() {
 		eprintln('Gio.Application not found, skipping')
 		return
 	}
+
 	defer { app.free() }
 
 	methods := app.collect_methods()
-	defer { for m in methods { m.free() } }
+	defer {
+		for m in methods {
+			m.free()
+		}
+	}
 
 	content := generate_object_constructor(methods, app, 'Application', '', 'Gio')
-	assert content.contains("v_gv_object(mut ns, mut vs, c'action-group', val.object_ptr())"),
-		'expected val.object_ptr() for GLib interface property, got:\n${content}'
+	assert content.contains("v_gv_object(mut ns, mut vs, c'action-group', val.object_ptr())"), 'expected val.object_ptr() for GObject interface property, got:\n${content}'
 }
 
 fn test_cross_namespace_object_property_uses_qualified_interface() {
@@ -784,6 +822,7 @@ fn test_cross_namespace_object_property_uses_qualified_interface() {
 		eprintln('Gtk.Widget not found, skipping')
 		return
 	}
+
 	defer { widget.free() }
 
 	mut imports := map[string]string{}

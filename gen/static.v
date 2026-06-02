@@ -147,7 +147,7 @@ const g_type_pointer_id = u64(68)
 
 // v_gtype_of reads a GObject instance\'s GType from its instance layout.
 // GTypeInstance.g_class points to GTypeClass whose first field is g_type.
-// This mirrors G_TYPE_FROM_INSTANCE() / G_OBJECT_TYPE() — stable GLib ABI.
+// This mirrors G_TYPE_FROM_INSTANCE() / G_OBJECT_TYPE() — stable GObject ABI.
 fn v_gtype_of(obj voidptr) u64 {
 	g_class := unsafe { *(&voidptr(obj)) }
 	return unsafe { *(&u64(g_class)) }
@@ -459,7 +459,7 @@ fn v_setp_object(obj voidptr, prop_name string, val voidptr) {
 
 // Signal closure infrastructure.
 // connect_<signal> methods box a V closure and register a trampoline as the C callback.
-// GLib calls the trampoline with (sender, ...extra_params..., user_data); the trampoline
+// GObject calls the trampoline with (sender, ...extra_params..., user_data); the trampoline
 // ignores everything except user_data, which holds the boxed V closure.
 
 struct VSignalVoidClosure {
@@ -470,7 +470,7 @@ struct VSignalBoolClosure {
 	call fn() bool @[required]
 }
 
-// destroy notify: frees the closure box when GLib disconnects the signal
+// destroy notify: frees the closure box when GObject disconnects the signal
 fn v_closure_notify(data voidptr, _closure voidptr) {
 	unsafe { free(data) }
 }

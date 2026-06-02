@@ -50,7 +50,7 @@ Note: compile/run with `-d dynamic_boehm` or V's GC crashes!
 
 ## 1. Install vgi
 
-``` Shel
+``` Shell
 v install edam.vgi
 ```
 
@@ -113,8 +113,9 @@ pub struct Window {
 }
 ```
 
-Use `Object.new()` to instantiate objects.  The generated `new()` methods allow
-you to optionally specify object properties (see Params Structs below).
+Use the static `.new()` functions, generated for each object, to instantiate
+them.  They allow you to specify optional object properties (see Object Params
+Structs below).
 
 ``` V
 pub fn Window.new(props WindowParams) &Window{
@@ -124,39 +125,32 @@ pub fn Window.new(props WindowParams) &Window{
 
 ### Properties
 
-Methods to set/get properties are defined on the object.  Properties can also be
-specified when creating the object (with the `new()` function).
+Methods to set/get properties are defined for each object and properties can be
+optionally provided on creation (via `new()`).
 
 ``` V
 win := Window.new() // no properties specified
-win.set_child(some_child) // set property after
-
-win := Window.new(child: some_child) // also works
+win.set_child(some_child) // set property after creation
+// or
+win := Window.new(child: some_child) //  set property during creation
 ```
 
 ### Implementation Details
 
 #### Object Params Structs
 
-Each object type has an associated *params struct* which is used to pass zero or
-more object properties to the object constructors to initialise it them.
+Each object type has an associated *params struct* (marked with `@[params]`)
+which is used to pass zero or more object properties to the object constructors
+to initialise them. Each params struct embeds the params struct for the object's
+parent, so parent's properties are included.  E.g., `gtk.Window` has an
+associated `gtk.WindowParams` struct, which embeds `gtk.WidgetParams`.
 
 ``` V
-win := gtk.Window.new(child: some_child)
-```
-
-The params structs for each object, marked with `@[params]`, list the properties
-for that object and embed the params struct for the object's parent (so that the
-parent's properties are also included).  E.g., `gtk.Window` has an associated
-`gtk.WindowParams` struct, which embeds `gtk.WidgetParams`.
-
-``` V
-@[param]
-struct WindowsParams {
+@[params]
+struct WindowParams {
     WidgetParams // inherit Widget's properties
-    // non-inherited properties:
     application ?IApplication
-	child ?IWidget
+    child ?IWidget
     ...
 }
 ```
@@ -164,40 +158,96 @@ struct WindowsParams {
 #### Object Interfaces
 
 Each object type also has an associated *object interface* (not to be confused
-with an interface provided by the library).  Object interfaces allow for user
-types derived from library objects to be used in their place.
+with interfaces provided by the GObject-based library).  Object interfaces are
+native V interfaces named `I*` which allow the user to use their own types,
+derived from library objects, in their place (since they derive from objects
+which conform to the object's interface).
 
-For example, the `gtk.Application` object struct has an accompanying object
-interface, `gtk.IApplication`.  In the example above, the `gtk.WindowParams`
-struct uses it as the type for the `application` property of the `Window`.  This
-allows either a `gtk.Application` or any derived object to be used.  For
-example, the user may wish to use `MyApp`, their own derived object.
+For example, `gtk.Application` has an accompanying object interface,
+`gtk.IApplication`.  As shown above, `gtk.WindowParams` has an `application`
+property of type `gtk.IApplication`, which allows you provide a
+`gtk.Application` during construction. However, you can also derive your own
+`MyApp` from `gtk.Application` and use that.
 
 ``` V
 struct MyApp {
-    gtk.Application // derives from gtk.Application, so can be used as IApplication
+    gtk.Application // MyApp derives from gtk.Application
 }
+app := MyApp{Application: gtk.Application.new()} // app is an IApplication
+win := gtk.Window.new(application: app) // and so can also be used here
 ```
 
-Note: the addition of this mechanism significantly impacts compilation time.
-However, the hope is hat future optimisation of V should address this.
+Note: there is a significant impact on compile time due to the addition of this
+mechanism.  However, the hope is that future V improvements will address this.
 
 ## Interfaces
 
-GLib-based interfaces are defined as V interfaces.
+GObject-based interfaces map to V interfaces.
 
 ``` V
-
+pub interface Buildable {
+    set_id(id string)
+    // ...
+}
 ```
+
+Assuming the GObject-library's interfaces are correctly defind, regular objects
+which conform to them are usable where the interfaces are accepted.
+
+### Inspection and Casting
+
+The actual type of a returned interface can be determined with the `.is()`
+method of the library's concrete objects.
+
+``` V
+buildable := get_some_buildable() // an interface
+is_button := gtk.Button.is(buildable) // check type
+```
+
+The object can only be obtained from a returned interface via smartcasting.
+
+``` V
+iWf button := gtk.Button.from(iface) {
+    // can use button
+} else {
+	// not a Button!
+}
+```
+
+### Implementation Details
+
+#### Interface Objects
+
+Not to be confused with the objects which the library exposes, the bindings also
+define a struct for each interface which the GObject-based library provides.
+These shim structs are named `S*`, provide methods which conform to the returned
+interface, and wrap a pointer to the underlying object.  Functions and methods
+which return interfaces actually return these structs, which allows them to have
+no knowledge of the actual type being returned.  This allows the user to create
+their own conformant objects which can also be used wherever the interfaces are
+accepted.
 
 ## Signals
 
-Connect signals with dedicated methods.
+Signals can be conected to closures.
 
 ``` V
-my_app.connect_activate(my_app.on_activate)
+button.connect_clicked(fn () {
+	println("clicked!")
+})
+```
+
+Signals can also be connected to methods on objects.
+
+``` V
+struct MyApp {
+    gtk.Application
+}
 
 fn (a MyApp) on_activate() {
 	println("activated!")
 }
+
+my_app := MyApp.new()
+my_app.connect_activate(my_app.on_activate)
 ```

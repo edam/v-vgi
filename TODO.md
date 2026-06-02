@@ -75,16 +75,16 @@ Still missing full generation:
 
 ## Type Safety
 
-- Interface types: voidptr (no resolution to concrete types like `GioAction`).
+- Interface types: voidptr (no resolution to concrete types like `GioAction`) for method params/returns.
+- Object property types: now use `IFoo` interfaces instead of voidptr for GObject types; cross-namespace imports generated automatically.
 - Arrays: no element type tracking.
 - Generics: no specialization for containers.
-- Cross-namespace: imports generated, but types fallback to voidptr if unresolved.
 
 # Priorities
 
 ## High Priority (Needed for basic functionality)
 
-1. DONE - Interface type resolution - Parent interfaces embedded; methods implemented on objects.
+1. DONE - Interface type resolution - Parent interfaces embedded; methods implemented on objects. Object interfaces (`IFoo`) generated for each GObject type, enabling derived user types to be used in place of library types.
 2. DONE - Enums and flags - Generated with proper V syntax (@[flag] for flags).
 3. DONE - GError handling - Shared error via `v_check_shared_error()`; ! returns for throwers.
 4. DONE - **Nullable return types** - `may_return_null()` → `?T` (no-throw) or `!T` with nil-as-error (throwing).
@@ -110,6 +110,17 @@ Still missing full generation:
 # Complete
 
 - Core infrastructure: ~90% complete (GI querying, generation, tests all pass; env setup required).
-- Basic object bindings: ~70% complete (structs, in-methods, properties, enums generated/tested; nullables/out-params/signals missing for usability).
-- Full API coverage: ~35% complete (objects/interfaces/enums; no constants/structs/unions/callbacks/module-funcs/signals).
-- Production ready: ~50% (Compilable, tested bindings for basics; high-pri fixes enable practical GTK/GLib use; cross-ns works).
+- Basic object bindings: ~80% complete (structs, in-methods, properties, enums, object interfaces, signals generated/tested).
+- Full API coverage: ~40% complete (objects/interfaces/enums/signals/module-funcs; no constants/structs/unions/callbacks).
+- Production ready: ~55% (Compilable, tested bindings for basics; object interface hierarchy enables real-world subclassing).
+
+# Additional things to looka t
+
+## v_gv_<type> rename
+
+could be `v_app_<type>` (append) or `v_nvapp_<type>` (name/value append)
+instead, and static.v talks about GValue. It uses GValueBuffer though. How come?
+
+## v_{get,set}p_<type> in static.c
+
+Inconsistent variable names. `gv` for GValue? Currently `value` and `gvalue`...

@@ -1,8 +1,9 @@
 module gen
 
-// generate signal bindings (connect methods) for a struct.
-// each signal produces a connect_<signal>(cb fn()) or connect_<signal>(cb fn() bool) method.
-// the shared trampoline infrastructure in v_util.v routes GLib callbacks into V closures.
+// Generate signal bindings (connect methods) for a struct.  Each signal
+// produces a connect_<signal>(cb fn()) or connect_<signal>(cb fn() bool)
+// method.  The shared trampoline infrastructure in v_util.v routes GObject
+// signal callbacks into V closures.
 fn generate_signal_bindings(signals []SignalInfo, struct_name string, namespace string) string {
 	mut content := ''
 	for sig in signals {
